@@ -99,6 +99,62 @@ Separate versions are provided for:
 These patches must be applied when using **Arduino Core 3.3.3**, as both platforms
 still rely on the corresponding ESP-IDF audio components that the modifications were designed for.
 
+## ⚙️ Extra Configuration (myoptions.h)
+
+The standard `myoptions.h` definitions remain unchanged compared to the official yoRadio release.  
+
+Only the following additional or modified options need to be applied for yoRadio Fusion:
+
+#define L10N_LANGUAGE HU      // Language for UI & localisation: HU, NL, PL, RU, EN, EL
+
+#define NAMEDAYS_FILE HU      // Nameday language: HU, PL, NL
+
+#define CLOCK_TTS_LANGUAGE "hu"  // Text-to-Speech language for the clock (e.g. "pl", "en", "de", etc)
+
+#define DIRECT_CHANNEL_CHANGE // Enables direct numeric channel input via IR remote
+
+#define AM_PM_STYLE          // Enable 12-hour clock format (AM/PM)
+
+
+## 🇺🇸 US Regional Settings (Time Format & Weather Units)
+
+yoRadio Fusion includes optional support for **US-style time and weather formats**.
+To enable these, three files must be adjusted:
+
+- `myoptions.h`
+
+- `timekeeper.cpp`
+
+- `displayL10n_en.h`
+
+### Step-by-Step Instructions
+
+You will need to **enable** some sections and **comment out** others inside these files.
+The exact lines are marked with comments in the source code.  
+
+`yoRadio\myoptions.h`
+
+**us date format:** myoptions.h add extra line >> #define USDATE // Enable MM/DD/YYYY date format (US style)
+
+`yoRadio\locale\displayL10n_en.h`
+
+Inside `displayL10n_en.h`, the section marked as **EXT_WEATHER** contains both  
+**EU standards** and **US standards** grouped into clearly separated blocks.
+
+Comment out the entire EU standards block
+
+Uncomment the entire US standards block
+
+Change the weather unit mode to “imperial” **const char weatherUnits[] PROGMEM = "imperial";**  /* standard, metric, imperial */
+
+`yoRadio\src\core\timekeeper.cpp`
+
+The basic task is the same as above:
+
+Comment out the entire EU standards block
+
+Uncomment the entire US standards block
+
 ## 🎚 VU Meter Calibration
 
 yoRadio Fusion includes a fully tunable VU engine with dynamic range shaping, soft-knee compression, smoothing and gain controls.  
