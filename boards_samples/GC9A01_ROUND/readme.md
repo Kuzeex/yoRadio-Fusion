@@ -1,4 +1,4 @@
-# **YourCee GC9A01 Round display – Board Notes**
+# **YourCee GC9A01 Round display with SPI interface – Board Notes**
 
 This folder contains the required configuration, drivers and files for using  
 the **GC9A01 (240×240)** display with *yoRadio Fusion*.
