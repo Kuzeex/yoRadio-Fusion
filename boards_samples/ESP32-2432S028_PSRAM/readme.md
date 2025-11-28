@@ -31,6 +31,27 @@ yoRadio Fusion requires PSRAM for stable audio buffering and display operation.
   - electrically compatible with **Espressif ESP-PSRAM32**  
   - select correct **voltage version** (1.8 V or 3.6 V depending on module)
 
+### ⚠️ Required PCB Trace Cuts (Important!)
+
+On the ESP32-2432S028 (CYD) board, two PCB traces must be cut before installing the external PSRAM chip.
+
+This is necessary because **Flash pin 1 and Flash pin 6 are wired differently** on the CYD board than what the ESP32 PSRAM interface expects.  
+Without correcting these lines, the ESP32 will not initialise the external PSRAM correctly.
+
+#### Required modifications:
+- **Cut the PCB trace from Flash pin 1** (boot/CS line)  
+- **Cut the PCB trace from Flash pin 6** (CLK line)  
+
+After cutting these two traces:
+- Flash continues to work normally  
+- PSRAM can be wired correctly to GPIO16 and GPIO17 (see wiring table)  
+- Boot stability and PSRAM detection become 100% reliable
+
+> 📌 These two cuts are mandatory.  
+> Without them the board may boot-loop, freeze during PSRAM init, or fail to detect external memory.
+
+A photo indicating the exact trace locations will be added to this folder as `cyd_PSRAM_mod_ver1.jpg` and `cyd_PSRAM_mod_ver2.jpg`.
+
 ### ✔ Wiring instructions
 
 Solder the PSRAM chip **directly onto the Flash chip's pads**:
@@ -43,7 +64,7 @@ Solder the PSRAM chip **directly onto the Flash chip's pads**:
 | 5 | Flash pin 5 |
 | 7 | Flash pin 7 |
 | 8 | Flash pin 8 (VDD_SDIO 3.3 V) |
-<img src="cyd_PSRAM_mod_ver2.jpg" width="480">
+<img src="cyd_PSRAM_mod.jpg" width="480">
 
 Additional connections:
 
@@ -55,13 +76,13 @@ Additional connections:
 
 ---
 
-## 🔥 2. Removing the onboard FM8002A DAC
+## 🔥 2. Removing the onboard SC8002A DAC
 
-The CYD board includes an onboard **FM8002A Class-D amplifier**.  
+The CYD board includes an onboard **SC8002A Class-D amplifier**.  
 It conflicts with the I2S output used by yoRadio Fusion.
 
 ### ✔ Required modification  
-**Desolder and remove the FM8002A chip completely.**
+**Desolder and remove the SC8002B chip completely.**
 
 This frees the I2S pins for the external DAC.
 
