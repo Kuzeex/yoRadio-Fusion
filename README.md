@@ -360,6 +360,21 @@ yoRadio-Fusion/
 8. After boot, connect the device to Wi-Fi (or use AP mode) and open the  
    **Web UI** in your browser using the device’s IP address.
 
+## 📌 Version History / Changelog
+
+v0.3.5 – 2025-12-08
+
+ • SD reading BUG fix (special thanks to Tamás Várai)
+ 
+ • Audio library version update (special thanks to Tamás Várai)
+ 
+ • Browser v2 integration (special thanks to Mirosław Bubka)
+ 
+ • TTS clock BUG fix
+ 
+ • Weather icon placement on 480×xxx and 320×xxx displays
+ 
+
 ## 🙌 Credits
 
 Based on ёRadio by e2002.
