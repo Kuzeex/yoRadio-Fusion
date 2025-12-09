@@ -14,6 +14,8 @@ Put this file next to yoRadio.ino and restart Arduino IDE. */
 //#define AM_PM_STYLE
 //#define USDATE   //US Date format
 #define DIRECT_CHANNEL_CHANGE 
+//#define MetaStationNameSkip 
+//#define IMPERIALUNIT
 
 //#define LED_BUILTIN_S3    48      /* S3-onboard RGB led pin */
 #define USE_BUILTIN_LED   false     /* Use S3-onboard RGB led */

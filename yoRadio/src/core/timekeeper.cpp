@@ -422,7 +422,7 @@ bool _getWeather() {
               result = false;
             }
             int gh = (int)config.store.grndHeight;
-            float press_corr = (float)press - (gh * 0.12f);
+            float press_corr = (float)press - (gh * 0.035f);
             // fallback
             if (press_corr < 800 || press_corr > 1200) {
                 press_corr = press;

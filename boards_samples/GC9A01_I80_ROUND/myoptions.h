@@ -6,7 +6,9 @@
 #define CLOCK_TTS_LANGUAGE "hu" //Default language TTS e.g. pl,en,de,ru,fr,hu
 //#define AM_PM_STYLE
 //#define USDATE   //US Date format
-#define DIRECT_CHANNEL_CHANGE 
+#define DIRECT_CHANNEL_CHANGE
+//#define MetaStationNameSkip 
+//#define IMPERIALUNIT 
 
 #define DSP_MODEL            DSP_GC9A01_I80
 // --- GC9A01 I80 (8080) ---

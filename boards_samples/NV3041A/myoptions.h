@@ -8,6 +8,7 @@
 //#define USDATE   //US Date format
 #define DIRECT_CHANNEL_CHANGE 
 #define MetaStationNameSkip 
+#define IMPERIALUNIT
 
 #define SAVER_Y_MIN  160
 

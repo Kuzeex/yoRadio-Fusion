@@ -7,6 +7,8 @@
 //#define AM_PM_STYLE
 //#define USDATE
 #define DIRECT_CHANNEL_CHANGE 
+//#define MetaStationNameSkip 
+//#define IMPERIALUNIT
 
 #define DSP_MODEL            DSP_GC9A01
 #define DSP_HSPI             false
