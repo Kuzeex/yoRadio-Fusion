@@ -2,36 +2,28 @@
 #if (TS_MODEL==TS_MODEL_CST816)
 
 #include "touchscreen_cst816.h"
-#include <Wire.h>
 #include <Adafruit_CST8XX.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
-#ifndef TS_TCA6408_PRESENT
-#define TS_TCA6408_PRESENT 0
-#endif
-
-#ifndef TS_INVERT_X
-  #define TS_INVERT_X (TS_TCA6408_PRESENT ? 1 : 0)
-#endif
-#ifndef TS_INVERT_Y
-  #define TS_INVERT_Y 0
-#endif
-#ifndef TS_SWAP_XY
-  #define TS_SWAP_XY  0
-#endif
-
-#ifndef TCA6408_ADDR
-  #define TCA6408_ADDR 0x20
-#endif
-#ifndef TCA6408_TS_BIT
-  #define TCA6408_TS_BIT 0   // P0 = CST816 INT
-#endif
 #ifndef TS_I2C_ADDR
-  #define TS_I2C_ADDR 0x15   // CST816 I2C 
+#define TS_I2C_ADDR 0x15
 #endif
+
+//
+// <<< FONTOS >>>
+// Globális I2C1 busz – a main.cpp-ben inicializáljuk!
+//
+TwoWire TouchWire = TwoWire(1);
 
 static Adafruit_CST8XX cst;
 CST816_Adapter ts;
 
+static portMUX_TYPE tsMux = portMUX_INITIALIZER_UNLOCKED;
+
+// ======================================
+// ROTATION MAP
+// ======================================
 static inline void rotateMap(uint16_t &x, uint16_t &y, uint16_t w, uint16_t h, uint8_t rot) {
   uint16_t nx=x, ny=y;
   switch (rot & 3) {
@@ -43,21 +35,36 @@ static inline void rotateMap(uint16_t &x, uint16_t &y, uint16_t w, uint16_t h, u
   x = nx; y = ny;
 }
 
-// ========================= TCA6408 ÁG =========================
+// ======================================
+// Optional TCA6408 support
+// ======================================
+#ifndef TS_TCA6408_PRESENT
+#define TS_TCA6408_PRESENT 0
+#endif
+
 #if TS_TCA6408_PRESENT
+
+#ifndef TCA6408_ADDR
+  #define TCA6408_ADDR 0x20
+#endif
+#ifndef TCA6408_TS_BIT
+  #define TCA6408_TS_BIT 0
+#endif
+
 static bool tca_read_u8(uint8_t reg, uint8_t &val) {
-  Wire.beginTransmission(TCA6408_ADDR);
-  Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) return false;    // repeated start
-  if (Wire.requestFrom(TCA6408_ADDR, (uint8_t)1) != 1) return false;
-  val = Wire.read();
+  TouchWire.beginTransmission(TCA6408_ADDR);
+  TouchWire.write(reg);
+  if (TouchWire.endTransmission(false) != 0) return false;
+  if (TouchWire.requestFrom(TCA6408_ADDR, (uint8_t)1) != 1) return false;
+  val = TouchWire.read();
   return true;
 }
+
 static bool tca_write_u8(uint8_t reg, uint8_t val) {
-  Wire.beginTransmission(TCA6408_ADDR);
-  Wire.write(reg);
-  Wire.write(val);
-  return Wire.endTransmission() == 0;
+  TouchWire.beginTransmission(TCA6408_ADDR);
+  TouchWire.write(reg);
+  TouchWire.write(val);
+  return TouchWire.endTransmission() == 0;
 }
 
 static inline bool tca_ts_irq_active() {
@@ -71,108 +78,158 @@ static volatile bool g_touch_irq = false;
 void IRAM_ATTR _tca_isr() { g_touch_irq = true; }
 #endif
 
-#else  // ---- NINCS TCA ----
+#else
+// NO TCA
 static inline bool tca_ts_irq_active() { return false; }
 static volatile bool g_touch_irq = false;
+
 #if (TS_INT >= 0)
 void IRAM_ATTR _direct_ts_isr() { g_touch_irq = true; }
 #endif
-#endif
-// ============================================================================
 
+#endif
+
+// ======================================
+// BACKGROUND TASK
+// ======================================
+static void cst816_task(void *arg) {
+  CST816_Adapter *self = static_cast<CST816_Adapter*>(arg);
+
+  for (;;) {
+    self->_pollOnce();
+    vTaskDelay(pdMS_TO_TICKS(5));
+  }
+}
+
+// ======================================
+// BEGIN()
+// ======================================
 bool CST816_Adapter::begin(uint16_t w, uint16_t h, bool flip) {
   _w = w; _h = h; _flip = flip;
 
-  // I2C indulás
-#if defined(TS_SDA) && defined(TS_SCL)
-  Wire.begin(TS_SDA, TS_SCL, 400000);   // 400 kHz
-#else
-  Wire.begin();
-  Wire.setClock(400000);
-#endif
+  //
+  // <<< FONTOS >>> 
+  // Itt már NEM indítjuk az I2C-t!
+  // A main.cpp-ben kell meghívni:
+  //   TouchWire.begin(TS_SDA, TS_SCL, 100000);
+  //
 
 #if TS_TCA6408_PRESENT
-  // TCA6408: polarity 0, minden bemenet (különösen P0)
-  tca_write_u8(0x02, 0x00); // Polarity
-  tca_write_u8(0x03, 0xFF); // Config: 1=input
-  uint8_t dummy; tca_read_u8(0x00, dummy); // első read: INT „clear”
+  tca_write_u8(0x02, 0x00);
+  tca_write_u8(0x03, 0xFF);
+  uint8_t dummy; tca_read_u8(0x00, dummy);
 
-  // Összesített INT (open-drain, aktív LOW) → MCU
   #if (TS_INT >= 0)
     pinMode(TS_INT, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(TS_INT), _tca_isr, FALLING);
   #endif
+
 #else
-  // Közvetlen CST816 INT → MCU
+
   #if (TS_INT >= 0)
     pinMode(TS_INT, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(TS_INT), _direct_ts_isr, FALLING);
   #endif
+
 #endif
 
-  // TS_RST a te panelodon GPIO0 → strapping pin! Ne húzzuk le, csak HIGH-on tartsuk.
 #if (TS_RST >= 0)
   pinMode(TS_RST, OUTPUT);
   digitalWrite(TS_RST, HIGH);
 #endif
 
-  // CST816 init (Adafruit lib gondoskodik a power-on állapotról)
-  (void)cst.begin(&Wire, TS_I2C_ADDR);
+  // <<< CST816 init I2C1-en >>>
+  cst.begin(&TouchWire, TS_I2C_ADDR);
 
   setRotation(flip ? 2 : 0);
   _hadTouch = false;
   _last = {0,0};
+  isTouched = false;
+
+  if (_taskHandle == nullptr) {
+    xTaskCreatePinnedToCore(
+      cst816_task,
+      "ts_cst816",
+      4096,
+      this,
+      1,
+      &_taskHandle,
+      0
+    );
+  }
+
   return true;
 }
 
+// ======================================
 void CST816_Adapter::setRotation(uint8_t r) { _rot = (r & 3); }
 
-void CST816_Adapter::read() {
-  isTouched = false;
+void CST816_Adapter::read() { /* háttér-task intézi */ }
 
-  // Csak akkor szondázz, ha tényleg kell: TCA P0 LOW vagy jött INT
-  bool shouldProbe = tca_ts_irq_active();
-#if (TS_INT >= 0)
-  shouldProbe = shouldProbe || g_touch_irq;
+bool CST816_Adapter::touched() const { return isTouched; }
+
+// ======================================
+// POLL
+// ======================================
+void CST816_Adapter::_pollOnce() {
+  bool localTouched = false;
+  TP_Point localPoint = {0,0};
+
+  bool shouldProbe = false;
+
+#if TS_TCA6408_PRESENT
+  if (tca_ts_irq_active()) shouldProbe = true;
 #endif
 
-  // keep-alive: ha semmi jelzés nincs, ritkán azért nézzünk rá (50 ms)
+#if (TS_INT >= 0)
+  if (g_touch_irq) shouldProbe = true;
+#endif
+
   static uint32_t last_keep = 0;
   uint32_t now = millis();
   if (!shouldProbe && (now - last_keep) < 50) return;
   if (!shouldProbe) last_keep = now;
 
-  // 3 minta, median-of-3 + 0,0 szűrés
-  const int N=3;
-  uint16_t xs[N], ys[N]; uint8_t n=0;
+  const int N = 3;
+  uint16_t xs[N], ys[N];
+  uint8_t count = 0;
+
   for (int i=0; i<N; ++i) {
     if (cst.touched()) {
       auto p = cst.getPoint(0);
-      if (!(p.x==0 && p.y==0)) { xs[n]=p.x; ys[n]=p.y; ++n; }
+      if (!(p.x==0 && p.y==0)) {
+        xs[count] = p.x;
+        ys[count] = p.y;
+        ++count;
+      }
     }
-    delay(2);
+    vTaskDelay(pdMS_TO_TICKS(2));
   }
-  if (n == 0) {
-#if (TS_INT >= 0)
-    // ha megszakítás miatt jöttünk, de nincs adat → „clear”
+
+  if (count == 0) {
     g_touch_irq = false;
-#endif
+    portENTER_CRITICAL(&tsMux);
+    isTouched = false;
+    portEXIT_CRITICAL(&tsMux);
     return;
   }
 
-  // minirendezés
-  auto sortN = [](uint16_t* a, uint8_t len){
-    for (uint8_t i=0;i<len;i++)
-      for (uint8_t j=i+1;j<len;j++)
+  auto sort3 = [](uint16_t* a, uint8_t n){
+    for (uint8_t i=0; i<n; i++)
+      for (uint8_t j=i+1; j<n; j++)
         if (a[j] < a[i]) { uint16_t t=a[i]; a[i]=a[j]; a[j]=t; }
   };
-  sortN(xs, n); sortN(ys, n);
-  uint16_t x = xs[n/2], y = ys[n/2];
 
-  // rotáció + clamp
+  sort3(xs, count);
+  sort3(ys, count);
+
+  uint16_t x = xs[count/2];
+  uint16_t y = ys[count/2];
+
   rotateMap(x, y, _w, _h, _rot);
+
 #if TS_SWAP_XY
-  uint16_t tx = x; x = y; y = tx;
+  uint16_t t = x; x = y; y = t;
 #endif
 #if TS_INVERT_X
   x = (_w - 1) - x;
@@ -180,37 +237,27 @@ void CST816_Adapter::read() {
 #if TS_INVERT_Y
   y = (_h - 1) - y;
 #endif
-  if (x >= _w) x = _w - 1;
-  if (y >= _h) y = _h - 1;
-  
-  const int MIN_LOCK  = 3;   // csak ekkora elmozdulás felett lockoljunk
-  const int AXIS_BIAS = 6;   // kevésbé agresszív
-  int dx = (int)x - (int)_last.x;
-  int dy = (int)y - (int)_last.y;
-  if (abs(dx) > MIN_LOCK || abs(dy) > MIN_LOCK) {
-    if (abs(dy) > abs(dx) + AXIS_BIAS)      x = _last.x; // vertikálisra zár
-    else if (abs(dx) > abs(dy) + AXIS_BIAS) y = _last.y; // horizontálisra zár
-  }
 
-  // (deadzone)
   const uint16_t DZ = 4;
   if (_hadTouch &&
-      (abs((int)x - (int)_last.x) <= DZ) &&
-      (abs((int)y - (int)_last.y) <= DZ)) {
-
+      abs((int)x - (int)_last.x) <= DZ &&
+      abs((int)y - (int)_last.y) <= DZ) {
+    x = _last.x;
+    y = _last.y;
   }
 
-  points[0].x = _last.x = x;
-  points[0].y = _last.y = y;
-  isTouched   = true;
-  _hadTouch   = true;
+  localPoint.x = x;
+  localPoint.y = y;
+  localTouched = true;
+  _last = localPoint;
+  _hadTouch = true;
 
-#if (TS_INT >= 0)
-  // INT „clear”: ha már nem aktív a TCA P0, engedd el a flaget
-  if (!tca_ts_irq_active()) g_touch_irq = false;
-#endif
+  g_touch_irq = false;
+
+  portENTER_CRITICAL(&tsMux);
+  points[0] = localPoint;
+  isTouched = localTouched;
+  portEXIT_CRITICAL(&tsMux);
 }
 
-bool CST816_Adapter::touched() const { return isTouched; }
-
-#endif // TS_MODEL==TS_MODEL_CST816
+#endif  // TS_MODEL==TS_MODEL_CST816

@@ -18,6 +18,11 @@
 //#define MetaStationNameSkip 
 //#define IMPERIALUNIT
 
+// --- DLNA / Synology ---
+#define USE_DLNA
+#define dlnaHost "192.168.180.122"
+#define dlnaIDX  21
+
 /******************************************/
 // #define LED_BUILTIN_S3    48     /* S3-onboard RGB led pin */
 #define USE_BUILTIN_LED false /* The RGB LED does not turn on.. */

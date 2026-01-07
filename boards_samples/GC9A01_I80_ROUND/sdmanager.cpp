@@ -31,6 +31,7 @@ SDManager sdman(FSImplPtr(new VFSImpl()));
 
 bool SDManager::start() {
   sdog.begin();
+  sdog.takeMutex();
   bool ok = false;
 
   if (xSemaphoreTake(spiMutex, portMAX_DELAY)) {
@@ -44,6 +45,7 @@ bool SDManager::start() {
     ok = ready;
     xSemaphoreGive(spiMutex);
   }
+  sdog.giveMutex();
   return ok;
 }
 

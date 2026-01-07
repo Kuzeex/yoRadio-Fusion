@@ -6,88 +6,82 @@
 #define CLOCK_TTS_LANGUAGE "hu" //Default language TTS e.g. pl,en,de,ru,fr,hu
 //#define AM_PM_STYLE
 //#define USDATE   //US Date format
-#define DIRECT_CHANNEL_CHANGE
-#define MetaStationNameSkip 
-//#define IMPERIALUNIT 
+#define DIRECT_CHANNEL_CHANGE 
+//#define MetaStationNameSkip 
+//#define IMPERIALUNIT
 
-#define DSP_MODEL            DSP_GC9A01_I80
-// --- GC9A01 I80 (8080) ---
-#define TFT_CS               2
-#define TFT_DC               18
-#define TFT_RST              21
-#define TFT_BL               42
-#define LED_INVERT           false
+// --- DLNA / Synology ---
+#define USE_DLNA
+#define dlnaHost "192.168.180.122"
+#define dlnaIDX  21
 
-// 8080 Databus (D0..D7)
-#define TFT_D0               10
-#define TFT_D1               11
-#define TFT_D2               12
-#define TFT_D3               13
-#define TFT_D4               14
-#define TFT_D5               15
-#define TFT_D6               16
-#define TFT_D7               17
+#define SAVER_Y_MIN  160
 
-// 8080
-#define TFT_WR               3
-#define TFT_RD               -1 
+#define DSP_MODEL         DSP_NV3041A
 
 /******************************************/
+
+#define TFT_CS  45                /*  SPI CS pin  */    
+#define TFT_RST -1                /*  SPI RST pin.  set to -1 and connect to Esp EN pin */
+#define TFT_SCK 47                /*  SPI DC/RS pin  */
+#define TFT_D0 21
+#define TFT_D1 48
+#define TFT_D2 40
+#define TFT_D3 39
+#define GFX_BL 1 
+
+/******************************************/
+
+#define BRIGHTNESS_PIN 1
+
+#define RSSI_STEPS       -50,-60,-70,-80
+#define RSSI_DIGIT       false
 
 /*  TOUCHSCREEN  */
-/*  Capacitive I2C touch screen  */
+#define  TS_MODEL   TS_MODEL_GT911
 
-#define TS_MODEL             TS_MODEL_CST816
-#define TS_SDA               8
-#define TS_SCL               9
-#define TS_INT               45
-#define TS_RST               0
-#define TS_TCA6408_PRESENT   1
-#define TCA6408_ADDR         0x20
-#define TCA6408_TS_BIT       0
-#define TS_INT               45
+/*  Capacitive I2C touch screen  */
+#define TS_SDA      8    
+#define TS_SCL      4       
+#define TS_INT      3    
+#define TS_RST      38 
 
 /******************************************/
 
-#define BRIGHTNESS_PIN       42
-
-#define PLAYER_FORCE_MONO true             /*  mono option on boot - false stereo, true mono  */
+#define PLAYER_FORCE_MONO false             /*  mono option on boot - false stereo, true mono  */
 #define I2S_INTERNAL      false             /*  If true - use esp32 internal DAC  */
 
 /* SD Card reader */
-#define SD_SPIPINS    41, 48, 47      /* SCK, MISO, MOSI */
-#define SDC_CS        40              /* Chip Select */
+#define SD_SPIPINS    12, 13, 11      /* SCK, MISO, MOSI */
+#define SDC_CS        10              /* Chip Select */
 
 /* Remote control sensor pin */
-#define IR_PIN               43
-#define IR_TIMEOUT           50              /*  see kTimeout description in IRremoteESP8266 example */
+#define IR_PIN 17
+#define IR_TIMEOUT        50              /*  see kTimeout description in IRremoteESP8266 example */
 
 /* I2S DAC */
 
-#define I2S_DOUT             7
-#define I2S_BCLK             5
-#define I2S_LRC              4
+//#define VS1053_CS 255
+
+#define I2S_DOUT 9
+#define I2S_BCLK 14
+#define I2S_LRC 5
 
 /* Encoder1 */
-//#define ENC_BTNL             38
-//#define ENC_BTNB             39
-//#define ENC_BTNR             44
+//#define ENC_BTNR             15
+//#define ENC_BTNL             16
+//#define ENC_BTNB             7
 //#define ENC_INTERNALPULLUP   false
 
 /* Encoder2 */
 //#define ENC2_BTNR             46
 //#define ENC2_BTNL             6
 //#define ENC2_BTNB             18
-//#define ENC2_INTERNALPULLUP   true
-
-
-/* Light sensor */
-//#define LIGHT_SENSOR         34
-//#define AUTOBACKLIGHT_MAX    1024
+//#define ENC2_INTERNALPULLUP   false
 
 /*  BUTTONS  */
 //#define BTN_LEFT              46          /*  VolDown, Prev */
-//#define BTN_CENTER            6           /*  Play, Stop, Show playlist */
+//#define BTN_CENTER            46          /*  Play, Stop, Show playlist */
 //#define BTN_RIGHT             18          /*  VolUp, Next */
 //#define BTN_UP                18           /*  Prev, Move Up */
 //#define BTN_DOWN              255           /*  Next, Move Down */
@@ -96,13 +90,22 @@
 //#define BTN_CLICK_TICKS    300              /*  Event Timing https://github.com/mathertel/OneButton#event-timing */
 //#define BTN_PRESS_TICKS    500              /*  Event Timing https://github.com/mathertel/OneButton#event-timing */
 
+
+/*  Battery */
+//#define BATTERY_OFF         /*  Turn off the battery charge level and voltage indicator */
+//#define HIDE_VOLT             /*  Hide only the battery voltage display */
+//#define ADC_PIN     1          /*  (or GPIO2) to read from the battery voltage divider. GPIO1 is the default.  */
+//#define R1               38.5      /*  The rating of the resistor connected to the plus side of the battery, in Kohms or Ohms. The default is 50.  */
+//#define R2               99.2      /*  The rating of the resistor connected to the minus, in Kohms or Ohms. The default is 100. */
+//#define DELTA_BAT       -0.009    /*  Correction value of battery voltage reading in volts */
+/* *********** ****************************** */
+
 /*  Other settings.  */
-//#define MUTE_PIN    38           /*  MUTE Pin */
+//#define MUTE_PIN    6           /*  MUTE Pin */
 //#define MUTE_VAL    LOW     /*  Write this to MUTE_PIN when player is stopped. Default is "HIGH" */
 //#define PLAYER_FORCE_MONO false   /*  mono option on boot - false stereo, true mono. Default is "false" */
 //#define ROTATE_90 false     /*  Optional 90 degree rotation for square displays. Default is "false"*/
 //#define HIDE_VOLPAGE       /* Hide the "Volume" page, using the progress bar as a guide. (MOD nva_lw and Maleksm)  */
-//#define HIDE_DATE            /* Hide date. (MOD nva_lw and Maleksm)  */
 //#define WAKE_PIN              255
 //#define NAME_STRIM                /* Show station name from stream. (MOD Maleksm)  */
 
