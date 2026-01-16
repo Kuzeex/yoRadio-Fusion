@@ -21,9 +21,23 @@
 
 #define PLAYLIST_SD_PATH     "/data/playlistsd.csv"
 #define INDEX_SD_PATH        "/data/indexsd.dat"
+#ifdef USE_DLNA //DLNA mod
+  #define PLAYLIST_DLNA_PATH "/data/playlist_dlna.csv"  //DLNA mod
+  #define INDEX_DLNA_PATH    "/data/indexdlna.dat"     //DLNA mod
 
-#define REAL_PLAYL   config.getMode()==PM_WEB?PLAYLIST_PATH:PLAYLIST_SD_PATH
-#define REAL_INDEX   config.getMode()==PM_WEB?INDEX_PATH:INDEX_SD_PATH
+  #define REAL_PLAYL \
+   (config.getMode()==PM_SDCARD ? PLAYLIST_SD_PATH : \
+    config.store.playlistSource==PL_SRC_DLNA ? PLAYLIST_DLNA_PATH : \
+    PLAYLIST_PATH)
+
+  #define REAL_INDEX \
+   (config.getMode()==PM_SDCARD ? INDEX_SD_PATH : \
+    config.store.playlistSource==PL_SRC_DLNA ? INDEX_DLNA_PATH : \
+    INDEX_PATH)
+#else
+  #define REAL_PLAYL (config.getMode()==PM_WEB?PLAYLIST_PATH:PLAYLIST_SD_PATH)
+  #define REAL_INDEX (config.getMode()==PM_WEB?INDEX_PATH:INDEX_SD_PATH)
+#endif
 
 #define MAX_PLAY_MODE   1
 #define WEATHERKEY_LENGTH 58
@@ -35,7 +49,17 @@
 
 #define CONFIG_VERSION  7
 
-enum playMode_e      : uint8_t  { PM_WEB=0, PM_SDCARD=1 };
+enum playMode_e : uint8_t {  //DLNA mod
+  PM_WEB    = 0,
+  PM_SDCARD = 1,
+};
+
+#ifdef USE_DLNA  //DLNA mod
+enum PlaylistSource : uint8_t {
+  PL_SRC_WEB  = 0,
+  PL_SRC_DLNA = 1
+};
+#endif
 
 void u8fix(char *src);
 
@@ -81,6 +105,7 @@ struct config_t
   int8_t    middle;
   int8_t    bass;
   uint16_t  lastStation;
+  uint16_t  lastDlnaStation;  //DLNA mod
   uint16_t  countStation;
   uint8_t   lastSSID;
   bool      audioinfo;
@@ -145,6 +170,7 @@ struct config_t
   char      weatherlat[10];
   char      weatherlon[10];
   uint16_t  grndHeight;
+  uint16_t  pressureSlope_x1000;  // hPa/m * 1000  (pl. 120 = 0.120)
   char      weatherkey[WEATHERKEY_LENGTH];
   uint16_t  _reserved;
   uint16_t  lastSdStation;
@@ -186,6 +212,10 @@ struct config_t
   uint16_t  timeSyncInterval;
   uint16_t  timeSyncIntervalRTC;
   uint16_t  weatherSyncInterval;
+#ifdef USE_DLNA   // DLNA mod
+  uint8_t playlistSource; 
+  void indexDLNAPlaylist();
+#endif
 };
 
 #if IR_PIN!=255
@@ -290,6 +320,11 @@ class Config {
     void setBitrateFormat(BitrateFormat fmt) { configFmt = fmt; }
     void initPlaylist();
     void indexPlaylist();
+#ifdef USE_DLNA //DLNA mod
+    void indexDLNAPlaylist();
+    void initDLNAPlaylist();
+    bool resumeAfterModeChange = false;
+#endif
     void initSDPlaylist();
     void changeMode(int newmode=-1);
     uint16_t playlistLength();
@@ -383,6 +418,9 @@ class Config {
 };
 
 extern Config config;
+#ifdef USE_DLNA //DLNA mod
+extern volatile bool g_dlnaBuilding;
+#endif
 #if DSP_HSPI || TS_HSPI || VS_HSPI
 extern SPIClass  SPI2;
 #endif

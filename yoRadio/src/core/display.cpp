@@ -45,6 +45,13 @@ Nextion nextion;
 #define SAVER_Y_MIN TFT_FRAMEWDT
 #endif
 
+#ifndef BOOT_PRG_COLOR
+  #define BOOT_PRG_COLOR 0xFFFF
+#endif
+#ifndef BOOT_TXT_COLOR
+  #define BOOT_TXT_COLOR 0xFFFF
+#endif
+
 QueueHandle_t displayQueue;
 
 static void loopDspTask(void * pvParameters){
@@ -133,7 +140,7 @@ void Display::init() {
 
 uint16_t Display::width(){ return dsp.width(); }
 uint16_t Display::height(){ return dsp.height(); }
-#if TIME_SIZE>19
+#if (TIME_SIZE > 19) && (DSP_MODEL != DSP_ST7735)
   #if DSP_MODEL==DSP_SSD1322
     #define BOOT_PRG_COLOR    WHITE
     #define BOOT_TXT_COLOR    WHITE
@@ -536,6 +543,9 @@ void Display::loop() {
     return;
   }
   if(displayQueue==NULL || _locked) return;
+#ifdef USE_DLNA //DLNA mod
+  if (g_dlnaBuilding) return;
+#endif
   _pager->loop();
 #ifdef USE_NEXTION
   nextion.loop();
@@ -1020,6 +1030,9 @@ void Display::_start(){
 
 void Display::putRequest(displayRequestType_e type, int payload){
   if(type==DSP_START) _start();
+#ifdef USE_DLNA  //DLNA mod
+  if (g_dlnaBuilding) return;
+#endif
   #ifdef USE_NEXTION
     requestParams_t request;
     request.type = type;

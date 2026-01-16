@@ -98,14 +98,14 @@ inline WidgetConfig getclockConf() {
 }
 
 //WeatherIconConf
-inline WidgetConfig getWeatherIconConf() {
+/*inline WidgetConfig getWeatherIconConf() {
   switch (config.store.vuLayout) {
     case 1: return { TFT_FRAMEWDT, 97, 2, WA_LEFT };  // Streamline
     case 2: return { TFT_FRAMEWDT, 97, 2, WA_LEFT };  // Boombox
     case 3: return { TFT_FRAMEWDT, 97, 2, WA_LEFT };  // Studio
     default: return { TFT_FRAMEWDT, 100, 2, WA_LEFT }; // Default
   }
-}
+}*/
 
 //const ScrollConfig dateConf       PROGMEM = {{ DSP_WIDTH-TFT_FRAMEWDT, 185, 2, WA_RIGHT }, 128, false, 220, 5000, 1, 50};
 static constexpr ScrollConfig kDateBase = {

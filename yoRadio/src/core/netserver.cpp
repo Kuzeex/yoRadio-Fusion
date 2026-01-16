@@ -17,6 +17,21 @@
 #include "../displays/fonts/clockfont_api.h"
 #include "../clock/clock_tts.h"
 
+#ifdef USE_DLNA //DLNA mod
+  #include "../network/dlna_index.h"
+  #include "../network/dlna_service.h"
+static bool g_dlnaInitialized = false;
+static SemaphoreHandle_t g_dlnaMutex = nullptr;
+
+static bool dlnaLock(TickType_t to = pdMS_TO_TICKS(30000)) {
+  if (!g_dlnaMutex) g_dlnaMutex = xSemaphoreCreateMutex();
+  return g_dlnaMutex && (xSemaphoreTake(g_dlnaMutex, to) == pdTRUE);
+}
+static void dlnaUnlock() {
+  if (g_dlnaMutex) xSemaphoreGive(g_dlnaMutex);
+}
+#endif
+
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
 #endif
@@ -57,39 +72,6 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 
 bool  shouldReboot  = false;
 
-static uint32_t g_vuSaveDue = 0;
-
-static uint16_t parseColor565(const String &val) {
-  String s = val; s.trim();
-  if (s.length() == 0) return 0;
-
-  if (s[0] == '#') { // #RRGGBB
-    if (s.length() != 7) return 0;
-    auto h2 = [](char c)->uint8_t {
-      if (c >= '0' && c <= '9') return c - '0';
-      c |= 0x20; // to lower
-      if (c >= 'a' && c <= 'f') return 10 + c - 'a';
-      return 0;
-    };
-    uint8_t r = (h2(s[1]) << 4) | h2(s[2]);
-    uint8_t g = (h2(s[3]) << 4) | h2(s[4]);
-    uint8_t b = (h2(s[5]) << 4) | h2(s[6]);
-    uint16_t r5 = (r >> 3) & 0x1F;
-    uint16_t g6 = (g >> 2) & 0x3F;
-    uint16_t b5 = (b >> 3) & 0x1F;
-    return (r5 << 11) | (g6 << 5) | b5;
-  }
-
-  if (s.startsWith("0x") || s.startsWith("0X")) {
-    return (uint16_t) strtoul(s.c_str(), nullptr, 16);
-  }
-
-  long v = s.toInt();
-  if (v < 0) v = 0;
-  if (v > 65535) v = 65535;
-  return (uint16_t)v;
-}
-
 #ifdef MQTT_ROOT_TOPIC
 //Ticker mqttplaylistticker;
 bool  mqttplaylistblock = false;
@@ -118,6 +100,189 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/", HTTP_ANY, handleIndex);
   webserver.onNotFound(handleNotFound);
   webserver.onFileUpload(handleUpload);
+//DLNA mod
+#ifdef USE_DLNA
+extern String g_dlnaControlUrl;
+
+/* ================= DLNA INIT ================= */
+webserver.on("/dlna/init", HTTP_GET, [](AsyncWebServerRequest *request) {
+
+  if (!dlnaLock(pdMS_TO_TICKS(15000))) {
+    request->send(429, "application/json",
+      "{\"ok\":false,\"error\":\"DLNA busy\"}");
+    return;
+  }
+
+  if (g_dlnaInitialized) {
+    dlnaUnlock();
+    request->send(200, "application/json", "{\"ok\":true,\"cached\":true}");
+    return;
+  }
+
+  String err;
+  String rootId = String(dlnaIDX);
+
+  if (!dlnaInit(rootId, err)) {
+    dlnaUnlock();
+    request->send(500, "application/json",
+      String("{\"ok\":false,\"error\":\"") + err + "\"}");
+    return;
+  }
+
+  g_dlnaInitialized = true;
+  dlnaUnlock();
+  request->send(200, "application/json", "{\"ok\":true}");
+});
+
+/* ================= DLNA LIST ================= */
+webserver.on("/dlna/list", HTTP_GET, [](AsyncWebServerRequest *request) {
+
+  if (!dlnaLock(pdMS_TO_TICKS(15000))) {
+    request->send(429, "application/json",
+      "{\"ok\":false,\"error\":\"DLNA busy\"}");
+    return;
+  }
+
+  if (!request->hasParam("objectId")) {
+    dlnaUnlock();
+    request->send(400, "application/json",
+      "{\"ok\":false,\"error\":\"Missing objectId\"}");
+    return;
+  }
+
+  if (!g_dlnaControlUrl.length()) {
+    dlnaUnlock();
+    request->send(503, "application/json",
+      "{\"ok\":false,\"error\":\"DLNA not initialized\"}");
+    return;
+  }
+
+  String objectId = request->getParam("objectId")->value();
+
+  uint32_t start = 0;
+  if (request->hasParam("start")) {
+    start = request->getParam("start")->value().toInt();
+  }
+
+  String json;
+
+  DlnaIndex idx;
+  bool ok = idx.listContainer(g_dlnaControlUrl, objectId, json, start);
+
+  dlnaUnlock();
+
+  if (!ok) {
+    request->send(500, "application/json",
+      "{\"ok\":false,\"error\":\"Browse failed\"}");
+    return;
+  }
+
+  request->send(200, "application/json", json);
+});
+
+/* ================= DLNA BUILD ================= */
+webserver.on("/dlna/build", HTTP_GET, [](AsyncWebServerRequest *request) {
+
+  if (!dlnaLock(pdMS_TO_TICKS(60000))) {
+    request->send(429, "text/plain", "DLNA busy");
+    return;
+  }
+
+  g_dlnaBuilding = true;
+
+  bool ok = false;   // eredmény
+
+  do {   // 👈 scope blokk
+
+    if (!request->hasParam("objectId")) {
+      request->send(400, "text/plain", "Missing objectId");
+      break;
+    }
+
+    if (!g_dlnaControlUrl.length()) {
+      request->send(503, "text/plain", "DLNA not initialized");
+      break;
+    }
+
+    const String objectId = request->getParam("objectId")->value();
+
+    DlnaIndex idx;
+    bool hasItems = false, hasContainers = false;
+
+    if (!idx.browseAndDecide(g_dlnaControlUrl, objectId, hasItems, hasContainers)) {
+      request->send(500, "text/plain", "Browse failed");
+      break;
+    }
+
+    if (!hasItems && !hasContainers) {
+      request->send(204, "text/plain", "Empty");
+      break;
+    }
+
+    uint8_t depth = hasItems ? 2 : 6;
+
+    if (!idx.autoBuildPlaylist(g_dlnaControlUrl, objectId, depth, 3000)) {
+      request->send(500, "text/plain", "DLNA playlist build failed");
+      break;
+    }
+
+    if (SPIFFS.exists(PLAYLIST_DLNA_PATH))
+      SPIFFS.remove(PLAYLIST_DLNA_PATH);
+
+    if (!SPIFFS.rename(TMP_PATH, PLAYLIST_DLNA_PATH)) {
+      request->send(500, "text/plain", "Rename failed");
+      break;
+    }
+
+    // Mark DLNA as active playlist source
+    config.saveValue(&config.store.playlistSource, (uint8_t)PL_SRC_DLNA, true, true);
+
+    // Reset DLNA index (start from first track)
+    config.saveValue(&config.store.lastDlnaStation, (uint16_t)0, true, true);
+
+    Serial.println("[DLNA] Playlist built, DLNA source activated");
+
+    request->send(200, "text/plain", "OK");
+    ok = true;
+
+  } while (false);
+
+  g_dlnaBuilding = false;
+  dlnaUnlock();
+});
+
+webserver.on("/playlist/dlna", HTTP_GET, [](AsyncWebServerRequest *request) {
+  config.resumeAfterModeChange = player.isRunning();
+  Serial.printf("[MODE] DLNA enter, resume=%d\n", config.resumeAfterModeChange);
+
+  config.store.playlistSource = PL_SRC_DLNA;
+  config.saveValue(&config.store.playlistSource, (uint8_t)PL_SRC_DLNA);
+
+  config.newConfigMode = PM_WEB;
+  netserver.requestOnChange(CHANGEMODE, 0);
+  
+  netserver.requestOnChange(GETINDEX, 0);
+  netserver.requestOnChange(GETPLAYERMODE, 0);
+
+  request->send(200, "text/plain", "OK");
+});
+
+webserver.on("/playlist/web", HTTP_GET, [](AsyncWebServerRequest *request) {
+  config.resumeAfterModeChange = player.isRunning();
+  Serial.printf("[MODE] WEB enter, resume=%d\n", config.resumeAfterModeChange);
+
+  config.store.playlistSource = PL_SRC_WEB;
+  config.saveValue(&config.store.playlistSource, (uint8_t)PL_SRC_WEB);
+
+  config.changeMode(PM_WEB);
+
+  netserver.requestOnChange(GETINDEX, 0);
+  netserver.requestOnChange(GETPLAYERMODE, 0);
+
+  request->send(200, "text/plain", "OK");
+});
+
+#endif
 
 /* ------------------Get current config for WebUI------------------ */
 webserver.on("/get", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -189,6 +354,7 @@ webserver.on("/get", HTTP_GET, [](AsyncWebServerRequest *request){
     json += "\"clockfontmono\":" + String(config.store.clockFontMono ? 1 : 0) + ",";
     json += "\"ttsinterval\":" + String((int)config.store.ttsInterval) + ",";
     json += "\"grndHeight\":" + String(config.store.grndHeight) + ",";
+    json += "\"pressureSlope_x1000\":" + String(config.store.pressureSlope_x1000) + ",";
     json += "\"ttsdndstart\":\"" + String(config.store.ttsDndStart) + "\",";
     json += "\"ttsdndstop\":\""  + String(config.store.ttsDndStop)  + "\"";
     json += "}";
@@ -207,370 +373,31 @@ webserver.on("/get", HTTP_GET, [](AsyncWebServerRequest *request){
   handleMyThemeUpload
   );
   /* ------------------myTheme webUI upload---------------*/
-  /* ------------------vuLayout webUI change---------------*/
-  webserver.on("/setvuLayout", HTTP_GET, [](AsyncWebServerRequest *request){
-   if (request->hasParam("value")) {
-    int v = request->getParam("value")->value().toInt();
-    config.store.vuLayout = v;
-    config.eepromWrite(EEPROM_START, config.store);
-    display.putRequest(DSP_RECONF,0);
-    request->send(200, "text/plain", "VU layout changed. Applying...");
-    
-   } else {
-    request->send(400, "text/plain", "Missing value param");
-   }
-  });
- /* ------------------vuLayout webUI change---------------*/
- /* ------------------VU runtime set (layout/bars/gap/midColor)---------------*/
-  webserver.on("/setvu", HTTP_GET, [](AsyncWebServerRequest *request){
-  if (!request->hasParam("name") || !request->hasParam("value")) {
-    request->send(400, "text/plain", "Missing params"); return;
-  }
-  String name  = request->getParam("name")->value();
-  String value = request->getParam("value")->value();
+webserver.on("/setvuLayout", HTTP_GET, [](AsyncWebServerRequest *request){
+  CmdHttp::handleSetVuLayout(request);
+});
 
-  auto &st = config.store;
-  uint8_t ly = st.vuLayout;
-  bool needReconf = false;
+webserver.on("/setvu", HTTP_GET, [](AsyncWebServerRequest *request){
+  CmdHttp::handleSetVu(request);
+});
 
-  // Opcionális: adott layout slot címzése (&layout=0..3), ha nem akarsz átváltani rá
-  if (request->hasParam("layout") && name != "layout") {
-    ly = (uint8_t) constrain(request->getParam("layout")->value().toInt(), 0, 3);
-  }
-
-  bool ok = true;
-
-  if (name == "enabled") {
-    uint8_t v = value.toInt() ? 1 : 0;
-    st.vumeter = v;
-    config.eepromWrite(EEPROM_START, st);
-
-    display.putRequest(SHOWVUMETER, 0); 
-    display.putRequest(CLOCK, 0); 
-    request->send(200, "text/plain", "OK");
-    return;
-  }
-  else if (name == "layout") {
-  uint8_t v = (uint8_t)constrain(value.toInt(), 0, 3);
-#if (DSP_MODEL==DSP_GC9A01 || DSP_MODEL==DSP_GC9A01A || DSP_MODEL==DSP_GC9A01_I80 || DSP_MODEL==DSP_ST7789_76)
-  if (v == 0) v = 2;
-#endif
-  st.vuLayout = v;
-    if (st.vumeter) needReconf = true;
-  }
-  else if (name == "bars") {
-    if (!st.vumeter) { request->send(409, "text/plain", "VU disabled"); return; }
-    REF_BY_LAYOUT(st, vuBarCount, ly) = (uint8_t)constrain(value.toInt(), 5, 64);
-    needReconf = true;
-  }
-  else if (name == "gap") {
-    if (!st.vumeter) { request->send(409, "text/plain", "VU disabled"); return; }
-    REF_BY_LAYOUT(st, vuBarGap, ly)    = (uint8_t)constrain(value.toInt(), 0, 6);
-    needReconf = true;
-  }
-  else if (name == "height") {
-    if (!st.vumeter) { request->send(409, "text/plain", "VU disabled"); return; }
-    REF_BY_LAYOUT(st, vuBarHeight, ly)    = (uint8_t)constrain(value.toInt(), 1, 50);
-    needReconf = true;
-  }
-  else if (name == "fade") {
-    if (!st.vumeter) { request->send(409, "text/plain", "VU disabled"); return; }
-    REF_BY_LAYOUT(st, vuFadeSpeed, ly) = (uint8_t)constrain(value.toInt(), 0, 20);
-  }
-  else if (name == "midColor") {
-    st.vuMidColor = parseColor565(value);
-  }
-  else if (name == "alphaUp") {
-    if (!st.vumeter) { request->send(409, "text/plain", "VU disabled"); return; }
-    REF_BY_LAYOUT(st, vuAlphaUp, ly) = (uint8_t)constrain(value.toInt(), 0, 100);
-  }
-  else if (name == "alphaDown") {
-    if (!st.vumeter) { request->send(409, "text/plain", "VU disabled"); return; }
-    REF_BY_LAYOUT(st, vuAlphaDn, ly) = (uint8_t)constrain(value.toInt(), 0, 100);
-  }
-  else if (name == "pUp") {
-    if (!st.vumeter) { request->send(409, "text/plain", "VU disabled"); return; }
-    REF_BY_LAYOUT(st, vuPeakUp, ly) = (uint8_t)constrain(value.toInt(), 0, 100);
-  }
-  else if (name == "pDown") {
-    if (!st.vumeter) { request->send(409, "text/plain", "VU disabled"); return; }
-    REF_BY_LAYOUT(st, vuPeakDn, ly) = (uint8_t)constrain(value.toInt(), 0, 100);
-  }
-  else if (name == "peakColor") {
-    st.vuPeakColor = parseColor565(value);
-  }
-  else if (name == "midOn") {
-    uint8_t on = value.toInt() ? 1 : 0;
-    config.store.vuMidOn = on;
-    if (on) {
-      uint16_t user = config.store.vuMidUserColor ? config.store.vuMidUserColor : config.store.vuMidColor;
-      config.store.vuMidColor = user;
-    } else {
-      config.store.vuMidUserColor = config.store.vuMidColor;
-      config.store.vuMidColor = config.theme.vumin;
-    }
-  }
-  else if (name == "peakOn") {
-    uint8_t on = value.toInt() ? 1 : 0;
-    config.store.vuPeakOn = on;
-    if (on) {
-      uint16_t user = config.store.vuPeakUserColor ? config.store.vuPeakUserColor : config.store.vuPeakColor;
-      config.store.vuPeakColor = user;
-    } else {
-      config.store.vuPeakUserColor = config.store.vuPeakColor;
-      config.store.vuPeakColor = config.theme.background;
-    }
-  }
-  else if (name == "midPct") {
-    uint8_t pct = (uint8_t)constrain(value.toInt(), 0, 100);
-    REF_BY_LAYOUT(st, vuMidPct, ly) = pct;
-
-    uint8_t hp = REF_BY_LAYOUT(st, vuHighPct, ly);
-    if (hp < pct) REF_BY_LAYOUT(st, vuHighPct, ly) = pct;
-  }
-
-  else if (name == "highPct") {
-    uint8_t pct = (uint8_t)constrain(value.toInt(), 0, 100);
-    REF_BY_LAYOUT(st, vuHighPct, ly) = pct;
-
-    uint8_t mp = REF_BY_LAYOUT(st, vuMidPct, ly);
-    if (pct < mp) REF_BY_LAYOUT(st, vuMidPct, ly) = pct;
-  }
-
-  else if (name == "expo") {
-    if (!st.vumeter) { request->send(409, "text/plain", "VU disabled"); return; }
-    // 50..300 → 0.50..3.00 gamma jellegű expo
-    REF_BY_LAYOUT(st, vuExpo, ly) = (uint8_t)constrain(value.toInt(), 50, 300);
-  }
-  else if (name == "floor") {
-    if (!st.vumeter) { request->send(409, "text/plain", "VU disabled"); return; }
-    // 0..95% (hogy maradjon hely a ceil-nek)
-    uint8_t v = (uint8_t)constrain(value.toInt(), 0, 95);
-    REF_BY_LAYOUT(st, vuFloor, ly) = v;
-    // min. 5% különbség
-    uint8_t c = REF_BY_LAYOUT(st, vuCeil, ly);
-    if (c <= v + 5) REF_BY_LAYOUT(st, vuCeil, ly) = (uint8_t)constrain(v + 5, 1, 100);
-  }
-  else if (name == "ceil") {
-    if (!st.vumeter) { request->send(409, "text/plain", "VU disabled"); return; }
-    // 5..100%
-    uint8_t v = (uint8_t)constrain(value.toInt(), 5, 100);
-    REF_BY_LAYOUT(st, vuCeil, ly) = v;
-    // min. 5% különbség
-    uint8_t f = REF_BY_LAYOUT(st, vuFloor, ly);
-    if (v <= f + 5) REF_BY_LAYOUT(st, vuFloor, ly) = (uint8_t)constrain(v - 5, 0, 95);
-  }
-  else if (name == "gain") {
-    if (!st.vumeter) { request->send(409, "text/plain", "VU disabled"); return; }
-    // 50..200 → 0.50..2.00
-    REF_BY_LAYOUT(st, vuGain, ly) = (uint8_t)constrain(value.toInt(), 50, 200);
-  }
-  else if (name == "knee") {
-    if (!st.vumeter) { request->send(409, "text/plain", "VU disabled"); return; }
-    // 0..20%
-    REF_BY_LAYOUT(st, vuKnee, ly) = (uint8_t)constrain(value.toInt(), 0, 20);
-  }
-  else {
-    request->send(400, "text/plain", "Unknown name"); return;
-  }
-
-  const bool isHeavy =
-    (name=="expo" || name=="floor" || name=="ceil" || name=="gain" || name=="knee" ||
-     name=="alphaUp" || name=="alphaDown" || name=="pUp" || name=="pDown" ||
-     name=="midPct" || name=="highPct" || name=="fade" || name=="midColor" || name=="peakColor");
-
-  bool saveNow = !isHeavy;  // alap: a nehéz paramétereket halasztjuk
-  if (request->hasParam("save")) {
-    saveNow = request->getParam("save")->value().toInt() != 0;
-  }
-
-  if (saveNow) {
-    config.eepromWrite(EEPROM_START, config.store);
-  } else {
-    g_vuSaveDue = millis() + 1200;
-  }
-
-  if (needReconf) display.putRequest(DSP_RECONF, 0);
-
-  request->send(200, "text/plain", "OK");
-  });
-/* --------------------------------------------------------------------------*/
 webserver.on("/setdate", HTTP_GET, [](AsyncWebServerRequest *request){
-  if (!request->hasParam("value")) {
-    request->send(400, "text/plain", "Missing param");
-    return;
-  }
-  int v = request->getParam("value")->value().toInt();
-  v = constrain(v, 0, 5);
-
-  config.store.dateFormat = (uint8_t)v;
-  config.eepromWrite(EEPROM_START, config.store);
-
-  // display.putRequest(DSP_REDRAW, 0);
-  display.putRequest(CLOCK, 0);
-
-  request->send(200, "text/plain", "OK");
+  CmdHttp::handleSetDate(request);
 });
-/* --------------------------------------------------------------------------*/
+
 webserver.on("/setnameday", HTTP_GET, [](AsyncWebServerRequest *request){
-  if (!request->hasParam("value")) {
-    request->send(400, "text/plain", "Missing param");
-    return;
-  }
-  int v = request->getParam("value")->value().toInt();
-  v = constrain(v, 0, 1);
-
-  config.store.showNameday = (uint8_t)v;
-  config.eepromWrite(EEPROM_START, config.store);
-
-  // építsük újra az UI-t, hogy a DateWidget initkor megkapja az állapotot
-  display.putRequest(CLOCK, 0);
-
-  request->send(200, "text/plain", "OK");
+  CmdHttp::handleSetNameday(request);
 });
-   /* ------------------AutoStart/Stop Timer save------------------ */
-  webserver.on("/set", HTTP_GET, [](AsyncWebServerRequest *request) {
-   bool touched = false;
-   bool changed = false;
 
-   if (request->hasParam("autoStartTime")) {
-    String val = request->getParam("autoStartTime")->value();
-    strlcpy(config.store.autoStartTime, val.c_str(), sizeof(config.store.autoStartTime));
-    changed = true;
-   }
-
-   if (request->hasParam("autoStopTime")) {
-    String val = request->getParam("autoStopTime")->value();
-    strlcpy(config.store.autoStopTime, val.c_str(), sizeof(config.store.autoStopTime));
-    changed = true;
-   }
-
-   // --- Elevation / grndHeight (m) ---
-   if (request->hasParam("grndHeight")) { 
-     touched = true;
-     int gh = request->getParam("grndHeight")->value().toInt();
-     gh = constrain(gh, 0, 3000); 
-     if (gh != (int)config.store.grndHeight) {
-       config.store.grndHeight = (uint16_t)gh;
-       changed = true;
-     }
-   }
-
-  // --- clockFontMono enabled ---
-  if (request->hasParam("clockFontMono")) {
-    touched = true;
-    uint8_t v = request->getParam("clockFontMono")->value().toInt() ? 1 : 0;
-    if (v != config.store.clockFontMono) {
-      config.store.clockFontMono = v;
-      changed = true;
-      display.putRequest(DSP_RECONF, 0);
-    }
-  }
-
-  // --- TTS enabled ---
-  if (request->hasParam("ttsEnabled")) {
-    touched = true;
-    uint8_t v = request->getParam("ttsEnabled")->value().toInt() ? 1 : 0;
-    if (v != config.store.ttsEnabled) {
-      config.store.ttsEnabled = v;
-      clock_tts_enabled = (v != 0);           // runtime azonnal
-      changed = true;
-    }
-  }
-
-  // --- TTS during playback ---
-  if (request->hasParam("ttsDuringPlayback")) {
-    touched = true;
-    uint8_t v = request->getParam("ttsDuringPlayback")->value().toInt() ? 1 : 0;
-    if (v != config.store.ttsDuringPlayback) {
-      config.store.ttsDuringPlayback = v;
-      changed = true;
-    }
-  }
-
-  // --- TTS interval (perc) ---
-  if (request->hasParam("ttsInterval")) {
-    touched = true;
-    int iv = constrain(request->getParam("ttsInterval")->value().toInt(), 1, 240);
-    if (iv != (int)config.store.ttsInterval) {
-      config.store.ttsInterval = (uint8_t)iv;
-      clock_tts_interval = iv;         // runtime azonnal
-      changed = true;
-    }
-  }
-
-  // --- TTS DND RESET ---
-  if (request->hasParam("dndReset")) {
-    touched = true;
-    if (strlen(config.store.ttsDndStart) || strlen(config.store.ttsDndStop)) {
-      config.store.ttsDndStart[0] = '\0';
-      config.store.ttsDndStop[0]  = '\0';
-      changed = true;
-    }
-  }
-
-  // --- TTS DND APPLY (HH:MM) ---
-  if (request->hasParam("dndStartTime")) {
-    touched = true;
-    String val = request->getParam("dndStartTime")->value();
-    if (val.length() <= 5 && val.indexOf(':') == 2) {
-      if (strncmp(config.store.ttsDndStart, val.c_str(), sizeof(config.store.ttsDndStart)-1) != 0) {
-        strlcpy(config.store.ttsDndStart, val.c_str(), sizeof(config.store.ttsDndStart));
-        changed = true;
-      }
-    }
-  }
-  
-  if (request->hasParam("dndStopTime")) {
-    touched = true;
-    String val = request->getParam("dndStopTime")->value();
-    if (val.length() <= 5 && val.indexOf(':') == 2) {
-      if (strncmp(config.store.ttsDndStop, val.c_str(), sizeof(config.store.ttsDndStop)-1) != 0) {
-        strlcpy(config.store.ttsDndStop, val.c_str(), sizeof(config.store.ttsDndStop));
-        changed = true;
-      }
-    }
-  }
-
-  // --- Station Line / Border switch ---
-  if (request->hasParam("stationLine")) {
-    touched = true;
-    uint8_t v = request->getParam("stationLine")->value().toInt() ? 1 : 0;
-    if (v != config.store.stationLine) {
-      config.store.stationLine = v;
-      changed = true;
-      display.putRequest(DSP_RECONF, 0);
-   }
-  }
-
-  if (touched) {
-    if (changed) config.eepromWrite(EEPROM_START, config.store);
-    request->send(200, "text/plain", changed ? "OK" : "NOCHANGE");
-  } else {
-    request->send(400, "text/plain", "Missing parameters");
-  }
-
+webserver.on("/set", HTTP_GET, [](AsyncWebServerRequest *request){
+  CmdHttp::handleSet(request);
 });
-  /* ------------------AutoStart/Stop Timer save------------------ */
-/* ------------------Clock font webUI change---------------*/
-  webserver.on("/setClockFont", HTTP_GET, [](AsyncWebServerRequest *request){
-    if (!request->hasParam("id")) {
-      request->send(400, "text/plain", "Missing id param");
-      return;
-    }
-    uint8_t id = (uint8_t) request->getParam("id")->value().toInt();
-    id = clockfont_clamp_id(id); 
 
-    bool changed = (config.store.clockFontId != id);
-    config.store.clockFontId = id;
-    config.eepromWrite(EEPROM_START, config.store);
-
-    display.putRequest(CLOCK, 0);
-
-  request->send(200, "text/plain", changed ? "Clock font changed" : "Clock font unchanged");
-  });
-/* ------------------Clock font webUI change---------------*/
+webserver.on("/setClockFont", HTTP_GET, [](AsyncWebServerRequest *request){
+  CmdHttp::handleSetClockFont(request);
+});
   webserver.serveStatic("/", SPIFFS, "/www/").setCacheControl("max-age=31536000");
+
 #ifdef CORS_DEBUG
   DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Origin"), F("*"));
   DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Headers"), F("content-type"));
@@ -657,18 +484,28 @@ void NetServer::processQueue(){
     wsBuf[0]='\0';
     switch (request.type) {
       case PLAYLIST:        getPlaylist(clientId); break;
-      case PLAYLISTSAVED:   {
-        #ifdef USE_SD
-        if(config.getMode()==PM_SDCARD) {
-        //  config.indexSDPlaylist();
+      case PLAYLISTSAVED: {
+      #ifdef USE_SD
+        if (config.getMode() == PM_SDCARD) {
           config.initSDPlaylist();
         }
-        #endif
-        if(config.getMode()==PM_WEB){
-          config.indexPlaylist(); 
-          config.initPlaylist(); 
+      #endif
+
+      #ifdef USE_DLNA  //DLNA mod
+        if (config.getMode() == PM_WEB && config.store.playlistSource == PL_SRC_DLNA) {
+          config.indexDLNAPlaylist();
+          config.initDLNAPlaylist();
+          break;
         }
-        getPlaylist(clientId); break;
+      #endif
+
+        if (config.getMode() == PM_WEB) {
+          config.indexPlaylist();
+          config.initPlaylist();
+        }
+
+        getPlaylist(clientId);
+        break;
       }
       case GETACTIVE: {
           bool dbgact = false, nxtn=false;
@@ -799,10 +636,34 @@ void NetServer::processQueue(){
       case EQUALIZER:     sprintf (wsBuf, "{\"payload\":[{\"id\":\"bass\", \"value\": %d}, {\"id\": \"middle\", \"value\": %d}, {\"id\": \"trebble\", \"value\": %d}]}", config.store.bass, config.store.middle, config.store.trebble); break;
       case BALANCE:       sprintf (wsBuf, "{\"payload\":[{\"id\": \"balance\", \"value\": %d}]}", config.store.balance); break;
       case SDINIT:        sprintf (wsBuf, "{\"sdinit\": %d}", SDC_CS!=255); break;
-      case GETPLAYERMODE: sprintf (wsBuf, "{\"playermode\": \"%s\"}", config.getMode()==PM_SDCARD?"modesd":"modeweb"); break;
-      #ifdef USE_SD
-        case CHANGEMODE:    config.changeMode(config.newConfigMode); return; break;
+      case GETPLAYERMODE: { //DLNA mod
+#ifdef USE_DLNA  
+      if (config.getMode() == PM_WEB && config.store.playlistSource == PL_SRC_DLNA) {
+          sprintf(wsBuf, "{\"playermode\": \"modedlna\"}");
+      } else
+#endif
+      if (config.getMode() == PM_SDCARD) {
+          sprintf(wsBuf, "{\"playermode\": \"modesd\"}");
+        } else {
+          sprintf(wsBuf, "{\"playermode\": \"modeweb\"}");
+        }
+        break;
+      }
+#ifdef USE_SD
+      case CHANGEMODE:
+        config.changeMode(config.newConfigMode);
+
+      #ifdef USE_DLNA
+        if (config.resumeAfterModeChange) {
+          Serial.println("[MODE] Resume playback after mode change");
+          player.sendCommand({PR_PLAY, -1});
+          config.resumeAfterModeChange = false;
+        }
       #endif
+
+  return;
+  break;
+#endif
       default:          break;
     }
     if (strlen(wsBuf) > 0) {
@@ -938,7 +799,24 @@ void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint8_t client
         if (player.isRunning()) player.sendCommand({PR_PLAY, -config.lastStation()});
         return;
       }
+#ifdef USE_DLNA //DLNA mod
+      // ===== WEB playlist aktiválás =====
+      if (strcmp(_wscmd, "playlist") == 0 && strcmp(_wsval, "web") == 0) {
 
+        Serial.println("[WEB] Switch to WEB playlist");
+
+        config.store.playlistSource = PL_SRC_WEB;
+        config.saveValue(&config.store.playlistSource, (uint8_t)PL_SRC_WEB);
+      
+        config.indexPlaylist();
+        config.initPlaylist();
+
+        netserver.requestOnChange(GETINDEX, 0);
+        netserver.requestOnChange(GETPLAYERMODE, 0);
+
+        return;
+      }
+#endif
       if (cmd.exec(_wscmd, _wsval, clientId)) {
         return;
       }
@@ -948,7 +826,8 @@ void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint8_t client
 
 
 void NetServer::getPlaylist(uint8_t clientId) {
-  sprintf(nsBuf, "{\"file\": \"http://%s%s\"}", config.ipToStr(WiFi.localIP()), PLAYLIST_PATH);
+  //sprintf(nsBuf, "{\"file\": \"http://%s%s\"}", config.ipToStr(WiFi.localIP()), PLAYLIST_PATH);
+  sprintf(nsBuf, "{\"file\": \"http://%s%s\"}", config.ipToStr(WiFi.localIP()), REAL_PLAYL);  //DLNA mod
   if (clientId == 0) { websocket.textAll(nsBuf); } else { websocket.text(clientId, nsBuf); }
 }
 
@@ -1020,7 +899,7 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
         //player.sendCommand({PR_STOP, 0});
         if(SPIFFS.exists(PLAYLIST_PATH)) SPIFFS.remove(PLAYLIST_PATH);
         if(SPIFFS.exists(INDEX_PATH)) SPIFFS.remove(INDEX_PATH);
-        if(SPIFFS.exists(PLAYLIST_SD_PATH)) SPIFFS.remove(PLAYLIST_SD_PATH);
+        if(SPIFFS.exists(PLAYLIST_SD_PATH)) SPIFFS.remove(PLAYLIST_SD_PATH); 
         if(SPIFFS.exists(INDEX_SD_PATH)) SPIFFS.remove(INDEX_SD_PATH);
       }
       freeSpace = (float)SPIFFS.totalBytes()/100*68-SPIFFS.usedBytes();
@@ -1127,21 +1006,57 @@ void handleNotFound(AsyncWebServerRequest * request) {
   if(request->url()=="/emergency") { request->send_P(200, "text/html", emergency_form); return; }
   if(request->method() == HTTP_POST && request->url()=="/webboard" && config.emptyFS) { request->redirect("/"); ESP.restart(); return; }
   if (request->method() == HTTP_GET) {
+//DLNA mod
+#ifdef USE_DLNA
+  if (request->method() == HTTP_GET &&
+      request->url().startsWith("/data/dlna_")) {
+
+    String path = request->url();
+    Serial.printf("[DLNA][HTTP] GET %s\n", path.c_str());
+
+    if (!SPIFFS.exists(path)) {
+      request->send(404, "text/plain", "DLNA file not found");
+      return;
+    }
+
+    String type = "text/plain";
+    if (path.endsWith(".json")) type = "application/json";
+    else if (path.endsWith(".csv")) type = "text/plain";
+
+    request->send(SPIFFS, path, type);
+    return;
+  }
+#endif
     DBGVB("[%s] client ip=%s request of %s", __func__, config.ipToStr(request->client()->remoteIP()), request->url().c_str());
     if (strcmp(request->url().c_str(), PLAYLIST_PATH) == 0 || 
         strcmp(request->url().c_str(), SSIDS_PATH) == 0 || 
         strcmp(request->url().c_str(), INDEX_PATH) == 0 || 
         strcmp(request->url().c_str(), TMP_PATH) == 0 || 
         strcmp(request->url().c_str(), PLAYLIST_SD_PATH) == 0 || 
-        strcmp(request->url().c_str(), INDEX_SD_PATH) == 0) {
+        strcmp(request->url().c_str(), INDEX_SD_PATH) == 0
+#ifdef USE_DLNA  //DLNA mod
+        || strcmp(request->url().c_str(), PLAYLIST_DLNA_PATH) == 0
+        || strcmp(request->url().c_str(), INDEX_DLNA_PATH) == 0
+#endif
+       ) {
 #ifdef MQTT_ROOT_TOPIC
       if (strcmp(request->url().c_str(), PLAYLIST_PATH) == 0) while (mqttplaylistblock) vTaskDelay(5);
 #endif
-      if(strcmp(request->url().c_str(), PLAYLIST_PATH) == 0 && config.getMode()==PM_SDCARD){
+     /* if(strcmp(request->url().c_str(), PLAYLIST_PATH) == 0 && config.getMode()==PM_SDCARD){
         netserver.chunkedHtmlPage("application/octet-stream", request, PLAYLIST_SD_PATH);
       }else{
         netserver.chunkedHtmlPage("application/octet-stream", request, request->url().c_str());
-      }
+      }*/
+  if (strcmp(request->url().c_str(), PLAYLIST_PATH) == 0) {
+    netserver.chunkedHtmlPage("application/octet-stream", request, REAL_PLAYL);  //DLNA mod
+    return;
+  }
+
+  if (strcmp(request->url().c_str(), INDEX_PATH) == 0) {
+    netserver.chunkedHtmlPage("application/octet-stream", request, REAL_INDEX);  //DLNA mod
+    return;
+  }
+  netserver.chunkedHtmlPage("application/octet-stream", request, request->url().c_str());
       return;
     }// if (strcmp(request->url().c_str(), PLAYLIST_PATH) == 0 || 
   }// if (request->method() == HTTP_GET)
@@ -1173,8 +1088,21 @@ void handleNotFound(AsyncWebServerRequest * request) {
     request->send(200, "image/x-icon", "data:,");
     return;
   }
-  if (request->url() == "/variables.js") {
-    sprintf (netserver.nsBuf, "var yoVersion='%s';\nvar formAction='%s';\nvar playMode='%s';\n", YOVERSION, (network.status == CONNECTED && !config.emptyFS)?"webboard":"", (network.status == CONNECTED)?"player":"ap");
+  if (request->url() == "/variables.js") {  //DLNA mod
+    snprintf(netserver.nsBuf, sizeof(netserver.nsBuf),
+      "var yoVersion='%s';\n"
+      "var formAction='%s';\n"
+      "var playMode='%s';\n"
+      "var dlnaSupported=%d;\n",
+      YOVERSION,
+      (network.status == CONNECTED && !config.emptyFS) ? "webboard" : "",
+      (network.status == CONNECTED) ? "player" : "ap",
+    #ifdef USE_DLNA
+      1
+    #else
+      0
+    #endif
+    );
     request->send(200, "text/html", netserver.nsBuf);
     return;
   }

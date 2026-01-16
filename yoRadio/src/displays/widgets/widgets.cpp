@@ -678,6 +678,11 @@ void VuWidget::_draw() {
   if (measL > _maxDimension) measL = _maxDimension;
   if (measR > _maxDimension) measR = _maxDimension;
 
+   #if DSP_MODEL == DSP_ST7735
+      int peakWidth = 2;
+   #else
+      int peakWidth = 4;
+   #endif
   switch (config.store.vuLayout) {
     case 3: { // Studio 
       _canvas->fillRect(0, 0, _maxDimension, _bands.height * 2 + _bands.space, _bgcolor);
@@ -695,7 +700,6 @@ void VuWidget::_draw() {
       peakSmoothR = (drawR > peakSmoothR) ? (p_up * drawR + (1 - p_up) * peakSmoothR)
                                           : (p_down * drawR + (1 - p_down) * peakSmoothR);
 
-      int peakWidth = 4;
       int peakOfs = 10;
       int peakX_L = constrain((int)std::max((int)snappedL, (int)peakSmoothL + peakOfs), 0, (int)_maxDimension - peakWidth);
       int peakX_R = constrain((int)std::max((int)snappedR, (int)peakSmoothR + peakOfs), 0, (int)_maxDimension - peakWidth);
@@ -730,7 +734,7 @@ void VuWidget::_draw() {
       peakSmoothR = (drawR > peakSmoothR) ? (p_up * drawR + (1 - p_up) * peakSmoothR)
                                           : (p_down * drawR + (1 - p_down) * peakSmoothR);
 
-      int peakWidth = 4, peakOfs = 10;
+      int peakOfs = 10;
       int peakLenL = (int)std::max((int)snappedL, (int)peakSmoothL); // hossz a középtől
       int peakX_L  = _bands.width - peakLenL - peakOfs - peakWidth;  // kifelé (balra) toljuk
       peakX_L = std::max(0, std::min((int)_bands.width - peakWidth, peakX_L));
@@ -770,7 +774,7 @@ void VuWidget::_draw() {
       peakSmoothR = (drawR > peakSmoothR) ? (p_up * drawR + (1 - p_up) * peakSmoothR)
                                           : (p_down * drawR + (1 - p_down) * peakSmoothR);
 
-      int peakWidth = 4, peakOfs = 4;
+      int peakOfs = 4;
       int peakX_L = constrain((int)std::max((int)snappedL, (int)peakSmoothL + peakOfs), 0, (int)_bands.width - peakWidth);
       int peakX_R = constrain((int)std::max((int)snappedR, (int)peakSmoothR + peakOfs), 0, (int)_bands.width - peakWidth);
 
@@ -805,9 +809,9 @@ void VuWidget::_draw() {
       peakSmoothR = (drawR > peakSmoothR) ? (p_up * drawR + (1 - p_up) * peakSmoothR)
                                           : (p_down * drawR + (1 - p_down) * peakSmoothR);
 
-      int peakHeight = 4, peakOfs = 4;
-      int peakY_L = constrain((int)peakSmoothL + peakOfs, 0, (int)_maxDimension - peakHeight);
-      int peakY_R = constrain((int)peakSmoothR + peakOfs, 0, (int)_maxDimension - peakHeight);
+      int peakOfs = 4;
+      int peakY_L = constrain((int)peakSmoothL + peakOfs, 0, (int)_maxDimension - peakWidth);
+      int peakY_R = constrain((int)peakSmoothR + peakOfs, 0, (int)_maxDimension - peakWidth);
 
       for (int band = 0; band < bandsCount; band++) {
         int i = band * h;
@@ -818,8 +822,8 @@ void VuWidget::_draw() {
         if (i + bandHeight <= snappedR)
           _canvas->fillRect(_bands.width + _bands.space, _maxDimension - i - bandHeight, _bands.width, bandHeight, bandColor);
       }
-      _canvas->fillRect(0, _maxDimension - peakY_L - peakHeight, _bands.width, peakHeight, peakColor);
-      _canvas->fillRect(_bands.width + _bands.space, _maxDimension - peakY_R - peakHeight, _bands.width, peakHeight, peakColor);
+      _canvas->fillRect(0, _maxDimension - peakY_L - peakWidth, _bands.width, peakWidth, peakColor);
+      _canvas->fillRect(_bands.width + _bands.space, _maxDimension - peakY_R - peakWidth, _bands.width, peakWidth, peakColor);
 
       dsp.drawRGBBitmap(_config.left, _config.top, _canvas->getBuffer(), _bands.width * 2 + _bands.space, _maxDimension);
     } break;
@@ -1003,7 +1007,7 @@ void ProgressWidget::loop() {
 void ClockWidget::init(WidgetConfig wconf, uint16_t fgcolor, uint16_t bgcolor){
   Widget::init(wconf, fgcolor, bgcolor);
   _timeheight = _textHeight();
-  _fullclock = TIME_SIZE>35 || DSP_MODEL==DSP_ILI9225 || DSP_MODEL==DSP_ST7789_170;
+  _fullclock = TIME_SIZE>35 || DSP_MODEL==DSP_ILI9225 || DSP_MODEL==DSP_ST7789_170 || DSP_MODEL==DSP_ST7735;
 #if DSP_MODEL == DSP_ST7789 || DSP_MODEL==DSP_ILI9341
     if (config.store.vuLayout != 0) {
         _fullclock = false;
@@ -1174,17 +1178,26 @@ void ClockWidget::_printClock(bool force){
         if (hlineY >= _top()) hlineY = _top() - 1;
     #ifdef AM_PM_STYLE
         gfx.drawFastVLine(_linesleft, secBaseY - 5, _top() - secBaseY + 10, config.theme.div);
-        gfx.drawFastHLine(_linesleft, hlineY + _space/2 -8, CHARWIDTH * _superfont * 2 + _space +15, config.theme.div);
         gfx.setFont();
-        gfx.setTextSize(2);
         if(TIME_SIZE==70) {
+          gfx.drawFastHLine(_linesleft, hlineY + _space/2 -8, CHARWIDTH * _superfont * 2 + _space +15, config.theme.div);
           gfx.setCursor(_linesleft+_space+1, hlineY + CHARHEIGHT - 2);  //másodperc alatt
+          gfx.setTextSize(2);
         } 
         if(TIME_SIZE==52) {
+          gfx.drawFastHLine(_linesleft, hlineY + _space/2 -8, CHARWIDTH * _superfont * 2 + _space +15, config.theme.div);
           gfx.setCursor(_linesleft+_space+1, hlineY + CHARHEIGHT - 8);  //másodperc alatt
+          gfx.setTextSize(2);
         }
         if(TIME_SIZE==35) {
+          gfx.drawFastHLine(_linesleft, hlineY + _space/2 -8, CHARWIDTH * _superfont * 2 + _space +15, config.theme.div);
           gfx.setCursor(_linesleft+_space+1, hlineY + CHARHEIGHT - 12);  //másodperc alatt
+          gfx.setTextSize(2);
+        }
+        if(TIME_SIZE==19) {
+          gfx.drawFastHLine(_linesleft, hlineY + _space/2 -4, CHARWIDTH * _superfont * 2 + _space +15, config.theme.div);
+          gfx.setCursor(_linesleft+_space+1, hlineY + CHARHEIGHT - 8);  //másodperc alatt
+          gfx.setTextSize(1);
         }
         gfx.setTextColor(config.theme.dow, config.theme.background);
         char buf[3];
@@ -1222,9 +1235,17 @@ void ClockWidget::_printClock(bool force){
       #endif
     }else{
     #ifdef AM_PM_STYLE
-      gfx.setCursor(secLeftFull, secBaseY-8);
+        if(TIME_SIZE==19) {
+          gfx.setCursor(secLeftFull+1, secBaseY-4);
+        } else {
+          gfx.setCursor(secLeftFull, secBaseY-8);
+        }  
     #else
-      gfx.setCursor(secLeftFull, secBaseY);
+       if(TIME_SIZE==19) {
+         gfx.setCursor(secLeftFull+1, secBaseY);
+       } else {
+         gfx.setCursor(secLeftFull, secBaseY);
+       }  
     #endif
     }
     int sec = ti.tm_sec;

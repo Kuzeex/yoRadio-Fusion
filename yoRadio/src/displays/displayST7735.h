@@ -3,9 +3,9 @@
 
 #include "Arduino.h"
 #include <Adafruit_GFX.h>
-#include <Adafruit_ST7735.h>
+#include "../Adafruit_ST7735_and_ST7789_Library/Adafruit_ST7735.h"
 #include "fonts/bootlogo62x40.h"
-#include "fonts/dsfont35.h"
+#include "fonts/dsfont19.h"
 
 typedef GFXcanvas16 Canvas;
 typedef Adafruit_ST7735 yoDisplay;
@@ -20,7 +20,7 @@ typedef Adafruit_ST7735 yoDisplay;
   #elif DTYPE==INITR_144GREENTAB
     #include "conf/displayST7735_144conf.h"
   #else
-    #include "conf/displayST7735_blackconf.h"
+    #include "conf/displayST7735_blackconf_custom.h"
   #endif
 #endif
 

@@ -99,7 +99,6 @@ inline WidgetConfig getclockConf() {
 }
 
 //const ScrollConfig dateConf       PROGMEM = {{ DSP_WIDTH-TFT_FRAMEWDT, 185, 2, WA_RIGHT }, 128, false, 220, 5000, 1, 50};
-//const ScrollConfig weatherConf PROGMEM = {{ TFT_FRAMEWDT, DSP_HEIGHT-15, 1, WA_LEFT }, 140, false, MAX_WIDTH, 0, 1, 25 }; // Idojaras  (������)
 static constexpr ScrollConfig kDateBase = {
   { TFT_FRAMEWDT, 40, 1, WA_LEFT }, 128, false, 128, 5000, 1, 50 };
 

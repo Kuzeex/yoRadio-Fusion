@@ -25,6 +25,10 @@
 
 Config config;
 
+#ifdef USE_DLNA //DLNA mod
+volatile bool g_dlnaBuilding = false;
+#endif
+
 void u8fix(char *src){
   char last = src[strlen(src)-1]; 
   if ((uint8_t)last >= 0xC2) src[strlen(src)-1]='\0';
@@ -82,6 +86,11 @@ void Config::init() {
   #endif
 #endif
   eepromRead(EEPROM_START, store);
+#ifdef USE_DLNA //DLNA mod
+  if (store.playlistSource > PL_SRC_DLNA) {
+    saveValue(&store.playlistSource, (uint8_t)PL_SRC_WEB, true, true);
+  }
+#endif
   bootInfo(); // https://github.com/e2002/yoradio/pull/149
   if (store.config_set != 4262) {
     setDefaults();
@@ -146,55 +155,71 @@ void Config::_setupVersion(){
   saveValue(&store.version, currentVersion);
 }
 
-void Config::changeMode(int newmode){
+void Config::changeMode(int newmode){ //DLNA mod 
 #ifdef USE_SD
   bool pir = player.isRunning();
-  if(SDC_CS==255) return;
-  if(getMode()==PM_SDCARD) {
-    //sdResumePos = player.getAudioFilePosition();
-  }
-  if(network.status==SOFT_AP || display.mode()==LOST){
-    saveValue(&store.play_mode, static_cast<uint8_t>(PM_SDCARD));
+
+  if (SDC_CS == 255 && newmode == PM_SDCARD) return;
+
+  if (network.status == SOFT_AP || display.mode() == LOST) {
+    saveValue(&store.play_mode, (uint8_t)PM_SDCARD);
     delay(50);
     ESP.restart();
   }
-  if(!sdman.ready && newmode!=PM_WEB) {
-    if(!sdman.start()){
-      Serial.println("##[ERROR]#\tSD Not Found");
-      netserver.requestOnChange(GETPLAYERMODE, 0);
-      sdman.stop();
-      return;
+
+  /* === SD only when explicitly requested === */
+  if (newmode == PM_SDCARD) {
+    if (!sdman.ready) {
+      if (!sdman.start()) {
+        Serial.println("##[ERROR]# SD Not Found");
+        netserver.requestOnChange(GETPLAYERMODE, 0);
+        return;
+      }
     }
   }
-  if(newmode<0||newmode>MAX_PLAY_MODE){
-    store.play_mode++;
-    if(getMode() > MAX_PLAY_MODE) store.play_mode=0;
-  }else{
-    store.play_mode=(playMode_e)newmode;
+
+  /* === set mode === */
+  store.play_mode = (playMode_e)newmode;
+  saveValue(&store.play_mode, (uint8_t)store.play_mode, true, true);
+
+  /* === filesystem binding === */
+  if (getMode() == PM_SDCARD) {
+    _SDplaylistFS = &sdman;
+  } else {
+    _SDplaylistFS = &SPIFFS;  // WEB + DLNA
   }
-  saveValue(&store.play_mode, store.play_mode, true, true);
-  _SDplaylistFS = getMode()==PM_SDCARD?&sdman:(true?&SPIFFS:_SDplaylistFS);
-  if(getMode()==PM_SDCARD){
-    if(pir) player.sendCommand({PR_STOP, 0});
+
+  /* === SD specific actions === */
+  if (getMode() == PM_SDCARD) {
+    if (pir) player.sendCommand({PR_STOP, 0});
     display.putRequest(NEWMODE, SDCHANGE);
-    #ifdef NETSERVER_LOOP1
-    while(display.mode()!=SDCHANGE)
-      delay(10);
-    #endif
     delay(50);
+  } else {
+    sdman.stop();   // WEB + DLNA → SD off
   }
-  if(getMode()==PM_WEB) {
-    if(network.status==SDREADY) ESP.restart();
-    sdman.stop();
-  }
-  if(!_bootDone) return;
+
+  if (!_bootDone) return;
+
   initPlaylistMode();
-  if (pir) player.sendCommand({PR_PLAY, getMode()==PM_WEB?store.lastStation:store.lastSdStation});
+
+  if (pir) {
+#ifdef USE_DLNA
+    uint16_t st = (getMode() == PM_SDCARD)
+      ? store.lastSdStation
+      : (store.playlistSource == PL_SRC_DLNA
+         ? store.lastDlnaStation
+         : store.lastStation);
+#else
+    uint16_t st = (getMode() == PM_SDCARD)
+                  ? store.lastSdStation
+                  : store.lastStation;
+    player.sendCommand({PR_PLAY, st});
+#endif
+  }
+
   netserver.resetQueue();
-  //netserver.requestOnChange(GETPLAYERMODE, 0);
   netserver.requestOnChange(GETINDEX, 0);
-  //netserver.requestOnChange(GETMODE, 0);
- // netserver.requestOnChange(CHANGEMODE, 0);
+
   display.resetQueue();
   display.putRequest(NEWMODE, PLAYER);
   display.putRequest(NEWSTATION);
@@ -265,14 +290,21 @@ bool Config::prepareForPlaying(uint16_t stationId){
     setSmartStart(0);
   return true;
 }
-void Config::configPostPlaying(uint16_t stationId){
-  if(getMode()==PM_SDCARD) {
-    //sdResumePos = 0;
+void Config::configPostPlaying(uint16_t stationId){ //DLNA mod
+  if (getMode() == PM_SDCARD) {
     saveValue(&store.lastSdStation, stationId);
   }
+#ifdef USE_DLNA
+  else if (store.playlistSource == PL_SRC_DLNA) {
+    saveValue(&store.lastDlnaStation, stationId);
+  }
+#endif
+  else {
+    saveValue(&store.lastStation, stationId);
+  }
+
   if(store.smartstart!=2) setSmartStart(1);
   netserver.requestOnChange(MODE, 0);
-  //display.putRequest(NEWMODE, PLAYER);
   display.putRequest(PSTART);
 }
 
@@ -287,48 +319,50 @@ void Config::setSDpos(uint32_t val){
   }
 }
 
-void Config::initPlaylistMode(){
+void Config::initPlaylistMode(){ //DLNA mod
   uint16_t _lastStation = 0;
   uint16_t cs = playlistLength();
-  #ifdef USE_SD
-    if(getMode()==PM_SDCARD){
-      if(!sdman.start()){
-        store.play_mode=PM_WEB;
-        Serial.println("SD Mount Failed");
-        changeMode(PM_WEB);
-        _lastStation = store.lastStation;
-      }else{
-        if(_bootDone) Serial.println("SD Mounted"); else BOOTLOG("SD Mounted");
-          if(_bootDone) Serial.println("Waiting for SD card indexing..."); else BOOTLOG("Waiting for SD card indexing...");
-          initSDPlaylist();
-          if(_bootDone) Serial.println("done"); else BOOTLOG("done");
-          _lastStation = store.lastSdStation;
-          
-          if(_lastStation>cs && cs>0){
-            _lastStation=1;
-          }
-          if(_lastStation==0) {
-            _lastStation = _randomStation();
-          }
-      }
-    }else{
-      Serial.println("done");
-      _lastStation = store.lastStation;
+
+#ifdef USE_SD
+  if (getMode() == PM_SDCARD) {
+    if (!sdman.start()) {
+      Serial.println("SD Mount Failed");
+      changeMode(PM_WEB);
+      return;
     }
-  #else //ifdef USE_SD
-    store.play_mode=PM_WEB;
-    _lastStation = store.lastStation;
-  #endif
-  if(getMode()==PM_WEB && !emptyFS) initPlaylist();
-  log_i("%d" ,_lastStation);
-  if (_lastStation == 0 && cs > 0) {
-    _lastStation = getMode()==PM_WEB?1:_randomStation();
+
+    Serial.println("SD Mounted");
+    initSDPlaylist();
+
+    _lastStation = store.lastSdStation;
+    if (_lastStation == 0 && cs > 0) _lastStation = _randomStation();
   }
+  else
+#endif
+  {
+#ifdef USE_DLNA
+    if (store.playlistSource == PL_SRC_DLNA) {
+      Serial.println("[MODE] Init DLNA playlist");
+      initDLNAPlaylist();
+      _lastStation = store.lastDlnaStation;
+      if (_lastStation == 0 && cs > 0) _lastStation = 1;
+    } else
+#endif
+    {
+      if (!emptyFS) initPlaylist();
+      _lastStation = store.lastStation;
+      if (_lastStation == 0 && cs > 0) _lastStation = 1;
+    }
+  }
+
   lastStation(_lastStation);
-  saveValue(&store.play_mode, store.play_mode, true, true);
+  saveValue(&store.play_mode, (uint8_t)store.play_mode, true, true);
+
   _bootDone = true;
   loadStation(_lastStation);
 }
+
+
 
 void Config::_initHW(){
   loadTheme();
@@ -729,8 +763,10 @@ void Config::setDefaults() {
   strlcpy(store.weatherlon,"18.5773", 10);
   strlcpy(store.weatherkey,"", WEATHERKEY_LENGTH);
   store.grndHeight = 0;
+  store.pressureSlope_x1000 = 120;
   store._reserved = 0;
   store.lastSdStation = 0;
+  store.lastDlnaStation = 0; //DLNA mod
   store.sdsnuffle = false;
   store.volsteps = 1;
   store.encacc = 200;
@@ -765,6 +801,9 @@ void Config::setDefaults() {
   strlcpy(store.autoStopTime, "", sizeof(store.autoStopTime)); /* ----- Auto On-Off Timer --format: empty means disabled --- */
   strlcpy(store.ttsDndStart, "", sizeof(store.ttsDndStart));
   strlcpy(store.ttsDndStop,  "", sizeof(store.ttsDndStop));
+#ifdef USE_DLNA   //DLNA mod
+  store.playlistSource = PL_SRC_WEB;
+#endif
   eepromWrite(EEPROM_START, store);
 }
 
@@ -822,7 +861,18 @@ void Config::setBalance(int8_t balance) {
 }
 
 uint8_t Config::setLastStation(uint16_t val) {
-  lastStation(val);
+  // Make "current item" persistent per mode
+  if (getMode() == PM_SDCARD) {
+    saveValue(&store.lastSdStation, val);
+    return store.lastSdStation;
+  }
+#ifdef USE_DLNA
+  if (store.playlistSource == PL_SRC_DLNA) {
+    saveValue(&store.lastDlnaStation, val);
+    return store.lastDlnaStation;
+  }
+#endif
+  saveValue(&store.lastStation, val);
   return store.lastStation;
 }
 
@@ -868,6 +918,64 @@ void Config::indexPlaylist() {
   index.close();
   playlist.close();
 }
+//DLNA mod
+#ifdef USE_DLNA
+void Config::indexDLNAPlaylist() {
+  File playlist = SPIFFS.open(PLAYLIST_DLNA_PATH, "r");
+  if (!playlist) {
+    Serial.println("[DLNA][IDX] Cannot open DLNA playlist");
+    return;
+  }
+
+  File index = SPIFFS.open(INDEX_DLNA_PATH, "w");
+  if (!index) {
+    Serial.println("[DLNA][IDX] Cannot create DLNA index");
+    playlist.close();
+    return;
+  }
+
+  static char lineBuf[512]; 
+  int sOvol = 0;
+
+  uint32_t lines = 0;
+  uint32_t ok = 0;
+
+  while (playlist.available()) {
+    uint32_t pos = playlist.position();
+
+    // readBytesUntil nem allokál, stabil
+    size_t n = playlist.readBytesUntil('\n', lineBuf, sizeof(lineBuf) - 1);
+    lineBuf[n] = 0;
+
+    // CRLF kezelés
+    if (n > 0 && lineBuf[n - 1] == '\r') lineBuf[n - 1] = 0;
+
+    // üres sor skip
+    if (lineBuf[0] == 0) {
+      lines++;
+      continue;
+    }
+
+    // FONTOS: parseCSV kapjon ÍRHATÓ buffert (lineBuf), ne String.c_str()-t
+    if (parseCSV(lineBuf, tmpBuf, tmpBuf2, sOvol)) {
+      index.write((uint8_t*)&pos, 4);
+      ok++;
+    }
+
+    lines++;
+
+    // WDT/Task starvation ellen (DLNA/WiFi közben kellhet)
+    if ((lines % 50) == 0) {
+      delay(0);   // vagy yield();
+    }
+  }
+
+  index.close();
+  playlist.close();
+
+  Serial.printf("[DLNA][IDX] DLNA playlist indexed: %lu/%lu\n", (unsigned long)ok, (unsigned long)lines);
+}
+#endif
 
 void Config::initPlaylist() {
   //store.countStation = 0;
@@ -880,6 +988,21 @@ void Config::initPlaylist() {
     saveValue(&store.countStation, store.countStation, true, true);
   }*/
 }
+
+#ifdef USE_DLNA //DLNA mod
+void Config::initDLNAPlaylist() {
+  indexDLNAPlaylist();
+
+  if (SPIFFS.exists(INDEX_DLNA_PATH)) {
+    File index = SPIFFS.open(INDEX_DLNA_PATH, "r");
+    if (index) {
+      lastStation(_randomStation());
+      index.close();
+    }
+  }
+}
+#endif
+
 uint16_t Config::playlistLength(){
   uint16_t out = 0;
   if (SDPLFS()->exists(REAL_INDEX)) {

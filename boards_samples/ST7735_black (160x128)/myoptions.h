@@ -15,7 +15,10 @@
 //#define AM_PM_STYLE
 //#define USDATE   //US Date format
 #define DIRECT_CHANNEL_CHANGE 
-#define MetaStationNameSkip
+//#define MetaStationNameSkip 
+//#define IMPERIALUNIT
+
+
 /******************************************/
 // #define LED_BUILTIN_S3    48     /* S3-onboard RGB led pin */
 #define USE_BUILTIN_LED false /* The RGB LED does not turn on.. */
@@ -23,8 +26,8 @@
 //#define DSP_MODEL DSP_ILI9486
 //#define DSP_MODEL DSP_ILI9488
 //#define DSP_MODEL DSP_ILI9341
-//#define DSP_MODEL DSP_ST7735
-#define DSP_MODEL DSP_ST7789_76
+#define DSP_MODEL DSP_ST7735
+//#define DSP_MODEL DSP_ST7789_76
 //#define DSP_MODEL DSP_1602I2C    //2x16 
 //#define DSP_MODEL DSP_2004I2C   //4x20
 //#define DSP_MODEL DSP_ST7789
@@ -35,12 +38,12 @@
 //#define HUN_LCD
 /*****************************************/
 
-#define TFT_DC 4
-#define TFT_CS 5
+#define TFT_DC 10
+#define TFT_CS 18
 #define TFT_RST -1
-#define TFT_SCK   18
-#define TFT_MOSI  23
-#define TFT_MISO  19
+/*#define TFT_SCK   12
+#define TFT_MOSI  11
+#define TFT_MISO  13*/
 
 #define BRIGHTNESS_PIN 14
 /*****************************************/
@@ -50,28 +53,28 @@
 /* Touch panel*/
 
 //#define TS_MODEL TS_MODEL_XPT2046
-//#define TS_CS 22
+//#define TS_CS 42
 /*****************************************/
 /* SD CARD */
-#define SDC_CS    12
+#define SDC_CS    39
 /****************************************/
 /*  I2S DAC  */
 
 /* PCM5102A  DAC */
-#define I2S_DOUT 27
-#define I2S_BCLK 26
-#define I2S_LRC  25
+#define I2S_DOUT 38
+#define I2S_BCLK 21
+#define I2S_LRC  47
 
 /* ENCODER 1 */
-#define ENC_BTNR  36 // S2
-#define ENC_BTNL  34 // S1
-#define ENC_BTNB  39 // KEY
+#define ENC_BTNR 4 // S2
+#define ENC_BTNL 6 // S1
+#define ENC_BTNB 5 // KEY
 #define ENC_INTERNALPULLUP		true
 
 /* ENCODER 2 */
-#define ENC2_BTNR 35 // S2
-#define ENC2_BTNL 33 // S1
-#define ENC2_BTNB 32 // KEY
+#define ENC2_BTNR 7 // S2
+#define ENC2_BTNL 16 // S1
+#define ENC2_BTNB 15 // KEY
 #define ENC2_INTERNALPULLUP		true
 /********************************************/
 
@@ -82,7 +85,7 @@
 /********************************************/
 
 /* REMOTE CONTROL INFRARED RECEIVER */
-#define IR_PIN 13
+//#define IR_PIN 17
 
 /********************************************/
 
@@ -91,7 +94,7 @@
 //#define MUTE_PIN     2            /*  MUTE Pin */
 //#define MUTE_VAL    LOW          /*  Write this to MUTE_PIN when player is stop */
 //#define PLAYER_FORCE_MONO false  /*  mono option on boot - false stereo, true mono. "false" */
-//#define I2S_INTERNAL    false    /*  If true - use esp32 internal DAC. "false" */
+#define I2S_INTERNAL    false    /*  If true - use esp32 internal DAC. "false" */
 //#define ROTATE_90   false        /*  Optional 90 degree rotation for square displays."false"*/
 //#define TFT_ROTATE      0        /*  Display rotation. 0 - 0, 1 - 90, 2 - 180, 3 - 270 degrees */
 //#define HIDE_VOLPAGE             /* Hangerő elrejtés, navigálj a hangerő folyamatjelző sávjával.*/

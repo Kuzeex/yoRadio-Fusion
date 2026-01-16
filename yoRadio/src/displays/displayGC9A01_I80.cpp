@@ -115,23 +115,33 @@ void yoDisplay::displayOn()           { if (_gfx) _gfx->displayOn(); }
 void yoDisplay::displayOff()          { if (_gfx) _gfx->displayOff(); }
 
 void yoDisplay::drawPixel(int16_t x, int16_t y, uint16_t color) {
+sdog.takeMutex();
   if (_gfx) _gfx->drawPixel(x, y, color);
+sdog.giveMutex();
 }
 
 void yoDisplay::writeFastHLine(int16_t x, int16_t y, int16_t w, uint16_t c) {
+sdog.takeMutex();
   if (_gfx) _gfx->drawFastHLine(x, y, w, c);
+sdog.giveMutex();
 }
 
 void yoDisplay::writeFastVLine(int16_t x, int16_t y, int16_t h, uint16_t c) {
+sdog.takeMutex();
   if (_gfx) _gfx->drawFastVLine(x, y, h, c);
+sdog.giveMutex();
 }
 
 void yoDisplay::writeFillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t c) {
+sdog.takeMutex();
   if (_gfx) _gfx->fillRect(x, y, w, h, c);
+sdog.giveMutex();
 }
 
 void yoDisplay::fillScreen(uint16_t c) {
+sdog.takeMutex();
   if (_gfx) _gfx->fillScreen(c);
+sdog.giveMutex();
 }
 
 void yoDisplay::drawRGBBitmap(int16_t x, int16_t y,
@@ -144,8 +154,8 @@ void yoDisplay::drawRGBBitmap(int16_t x, int16_t y,
 
 Arduino_GFX* yoDisplay::raw() { return _gfx; }
 
-void yoDisplay::startWrite() { if (!sdog.isLocked()) sdog.takeMutex(); }
-void yoDisplay::endWrite()   { if (sdog.isLocked())  sdog.giveMutex(); }
+void yoDisplay::startWrite() { sdog.takeMutex(); }
+void yoDisplay::endWrite()   { sdog.giveMutex(); }
 
 void yoDisplay::setAddrWindow(int16_t x, int16_t y, uint16_t w, uint16_t h)
 {
@@ -191,6 +201,9 @@ DspCore::DspCore() : yoDisplay() {}
 
 void DspCore::initDisplay() {
   begin();
+  cp437(true);
+  setTextWrap(false);
+  setTextSize(1);
 
   setRotation(
     ROTATE_90
@@ -208,17 +221,32 @@ void DspCore::clearDsp(bool black) {
 }
 
 void DspCore::flip() {
+  sdog.takeMutex();
   setRotation(
     ROTATE_90
       ? (config.store.flipscreen ? 0 : 2)
       : (config.store.flipscreen ? 2 : 0)
   );
+  sdog.giveMutex();
 }
 
-void DspCore::invert() { invertDisplay(config.store.invertdisplay); }
+void DspCore::invert() {
+  sdog.takeMutex();
+  invertDisplay(config.store.invertdisplay);
+  sdog.giveMutex();
+}
 
-void DspCore::sleep()  { displayOff(); }
-void DspCore::wake()   { displayOn(); }
+void DspCore::sleep() {
+  sdog.takeMutex();
+  displayOff();
+  sdog.giveMutex();
+}
+
+void DspCore::wake() {
+  sdog.takeMutex();
+  displayOn();
+  sdog.giveMutex();
+}
 
 uint16_t DspCore::textWidth(const char *txt) {
   int16_t x1, y1; uint16_t w, h;

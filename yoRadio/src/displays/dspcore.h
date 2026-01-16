@@ -7,7 +7,7 @@
   #define DSP_NOT_FLIPPED
 
 #elif DSP_MODEL==DSP_ST7735    // https://k210.org/images/content/uploads/yoradio/ST7735.jpg
-  #define TIME_SIZE           35
+  #define TIME_SIZE           19
   #define PSFBUFFER
   #include "displayST7735.h"
 

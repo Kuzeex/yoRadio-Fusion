@@ -10,6 +10,7 @@ extern Player player;
 bool clock_tts_enabled            = false;
 int  clock_tts_interval           = 60;
 static int  clock_lastMinute      = -1;
+static time_t lastTtsEpoch = 0;
 
 static bool playerWasRunning      = false;
 static int  clock_tts_prev_volume = 0;
@@ -147,9 +148,9 @@ void clock_tts_task_func(void *param) {
     }
 
     bool trigger =
-      (tm_info->tm_min % clock_tts_interval == 0) &&
-      (tm_info->tm_min != clock_lastMinute) &&
-      (tm_info->tm_sec == 0);
+     (tm_info->tm_min % clock_tts_interval == 0) &&
+     (tm_info->tm_min != clock_lastMinute) &&
+     (now - lastTtsEpoch >= 30);
 
     const bool allowDuring = config.store.ttsDuringPlayback;
 
@@ -160,6 +161,7 @@ void clock_tts_task_func(void *param) {
 
           playerWasRunning       = player.isRunning();
           clock_tts_prev_volume  = player.getVolume();
+          lastTtsEpoch = now;
           clock_lastMinute       = tm_info->tm_min;
 
           if (!allowDuring && playerWasRunning) {
@@ -196,7 +198,7 @@ void clock_tts_task_func(void *param) {
         if (millis() - ttsStepStart >= 150) {
 
           player.lockOutput = true;
-
+          vTaskDelay(pdMS_TO_TICKS(120));
           clock_tts_announcement(ttsBuffer, sizeof(ttsBuffer),
                                  tm_info->tm_hour,
                                  tm_info->tm_min,
@@ -204,7 +206,7 @@ void clock_tts_task_func(void *param) {
           player.setVolume(clock_tts_prev_volume);
           player.connecttospeech(ttsBuffer, clock_tts_language);
           player.setOutputPins(true);  
-
+          vTaskDelay(pdMS_TO_TICKS(80));
           ttsState = TTS_PLAYING;
           ttsStepStart = millis();
         }
@@ -247,6 +249,7 @@ void clock_tts_task_func(void *param) {
         }
 
         if (!streamRestart && !player.isRunning()) {
+          vTaskDelay(pdMS_TO_TICKS(250));   // watchdog / I2S safety
           player.lockOutput = false;
           player.sendCommand({PR_PLAY, config.lastStation()});
           streamRestart = true;

@@ -237,13 +237,17 @@ void Player::loop() {
   checkAutoStartStop();   /* ----- Auto On-Off Timer ----- */
   Audio::loop();
 
-  if (!isRunning() && _status == PLAYING) {
+  if (!isRunning() && _status == PLAYING) { //DLNA mod
     _stop(true);
-     if (config.getMode() == PM_SDCARD) {
-      if (player.getAudioFilePosition() == 0) {  // Csak akkor next(), ha a fájl ténylegesen lejárt
-        next();
-      }
+
+    if (config.getMode() == PM_SDCARD) {
+      if (player.getAudioFilePosition() == 0) next();   // Csak akkor next(), ha a fájl ténylegesen lejárt
     }
+  #ifdef USE_DLNA
+    else if (config.store.playlistSource == PL_SRC_DLNA) {
+      next();
+    }
+  #endif
   }
 
   if(_volTimer){
@@ -280,14 +284,23 @@ void Player::_play(uint16_t stationId) {
   _loadVol(config.store.volume);
   
   bool isConnected = false;
-  if(config.getMode()==PM_SDCARD && SDC_CS!=255){
+  if (config.getMode() == PM_SDCARD && SDC_CS != 255) {
     // A connecttoFS NEM támogat start offsetet SD-n → -1, indítás pozícionálás nélkül.
     isConnected = connecttoFS(sdman, config.station.url, -1);
-  }else {
-    config.saveValue(&config.store.play_mode, static_cast<uint8_t>(PM_WEB));
+  } else {
+#ifdef USE_DLNA //DLNA mod
+  // DLNA is WEB engine, de nem írjuk felül a mode-ot
+    if (config.store.playlistSource != PL_SRC_DLNA)
+#endif
+    {
+      config.saveValue(&config.store.play_mode,
+                       static_cast<uint8_t>(PM_WEB));
+    }
   }
-  connproc = false;
-  if(config.getMode()==PM_WEB) isConnected=connecttohost(config.station.url);
+  if (config.getMode() == PM_WEB) {
+    isConnected = connecttohost(config.station.url);
+  }
+
   connproc = true;
   if(isConnected){
     _status = PLAYING;
@@ -330,8 +343,18 @@ void Player::browseUrl(){
 
 void Player::prev() {
   uint16_t lastStation = config.lastStation();
-  if(config.getMode()==PM_WEB || !config.store.sdsnuffle){
-    if (lastStation == 1) config.lastStation(config.playlistLength()); else config.lastStation(lastStation-1);
+  if (config.getMode() != PM_SDCARD) {
+    // WEB + DLNA: always sequential wrap
+    if (lastStation <= 1) config.lastStation(config.playlistLength());
+    else config.lastStation(lastStation - 1);
+  } else {
+    // SD: sequential unless snuffle enabled (SD-only feature)
+    if (!config.store.sdsnuffle) {
+      if (lastStation <= 1) config.lastStation(config.playlistLength());
+      else config.lastStation(lastStation - 1);
+    } else {
+      config.lastStation(random(1, config.playlistLength() + 1));
+    }
   }
   config.stopedSdStationId = -1;  // Reseteli a seek hez mentett SD fájl sorszámát.
   sendCommand({PR_PLAY, config.lastStation()});
@@ -339,10 +362,18 @@ void Player::prev() {
 
 void Player::next() {
   uint16_t lastStation = config.lastStation();
-  if(config.getMode()==PM_WEB || !config.store.sdsnuffle){
-    if (lastStation == config.playlistLength()) config.lastStation(1); else config.lastStation(lastStation+1);
-  }else{
-    config.lastStation(random(1, config.playlistLength()));
+  if (config.getMode() != PM_SDCARD) {
+    // WEB + DLNA: always sequential wrap
+    if (lastStation >= config.playlistLength()) config.lastStation(1);
+    else config.lastStation(lastStation + 1);
+  } else {
+    // SD: sequential unless snuffle enabled
+    if (!config.store.sdsnuffle) {
+      if (lastStation >= config.playlistLength()) config.lastStation(1);
+      else config.lastStation(lastStation + 1);
+    } else {
+      config.lastStation(random(1, config.playlistLength() + 1));
+    }
   }
   config.stopedSdStationId = -1;  // Reseteli a seek hez mentett SD fájl sorszámát.
   sendCommand({PR_PLAY, config.lastStation()});

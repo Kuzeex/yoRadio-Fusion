@@ -13,4 +13,19 @@ private:
 
 extern CommandHandler cmd;
 
+// ----- HTTP helperk -----
+class AsyncWebServerRequest;  // forward deklaráció
+
+namespace CmdHttp {
+  void handleSet(AsyncWebServerRequest *request);        // /set
+  void handleSetVu(AsyncWebServerRequest *request);      // /setvu
+  void handleSetVuLayout(AsyncWebServerRequest *request);// /setvuLayout
+  void handleSetDate(AsyncWebServerRequest *request);    // /setdate
+  void handleSetNameday(AsyncWebServerRequest *request); // /setnameday
+  void handleSetClockFont(AsyncWebServerRequest *request);// /setClockFont
+}
+
+// VU-hoz használt globális időzítő
+extern uint32_t g_vuSaveDue;
+
 #endif

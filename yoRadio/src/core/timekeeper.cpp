@@ -198,6 +198,9 @@ void TimeKeeper::_doAfterWait() {
   }
 }*/
 void TimeKeeper::_upClock() {
+#ifdef USE_DLNA //DLNA mod
+  if (g_dlnaBuilding) return;
+#endif
   struct tm ti;
   time_t now = time(nullptr);
 
@@ -249,6 +252,9 @@ void TimeKeeper::_upScreensaver() {
 }
 
 void TimeKeeper::_upRSSI() {
+#ifdef USE_DLNA //DLNA mod
+  if (g_dlnaBuilding) return;
+#endif
   if (network.status == CONNECTED) {
     netserver.setRSSI(WiFi.RSSI());
     netserver.requestOnChange(NRSSI, 0);
@@ -271,6 +277,9 @@ void TimeKeeper::_upSDPos() {
 }
 
 void TimeKeeper::timeTask() {
+#ifdef USE_DLNA //DLNA mod
+  if (g_dlnaBuilding) return;
+#endif
   static uint8_t tsFailCnt = 0;
   config.waitConnection();
   if (getLocalTime(&network.timeinfo)) {
@@ -295,6 +304,9 @@ void TimeKeeper::timeTask() {
   }
 }
 void TimeKeeper::weatherTask() {
+#ifdef USE_DLNA //DLNA mod
+  if (g_dlnaBuilding) return;
+#endif
   forceWeather = false;
   if (!weatherBuf || strlen(config.store.weatherkey) == 0 || !config.store.showweather) {
     return;
@@ -421,8 +433,9 @@ bool _getWeather() {
               Serial.println("##WEATHER###: wind deg not found !");
               result = false;
             }
-            int gh = (int)config.store.grndHeight;
-            float press_corr = (float)press - (gh * 0.035f);
+            int gh = (int)config.store.grndHeight;  //m
+            float k = (float)config.store.pressureSlope_x1000 / 1000.0f;
+            float press_corr = (float)press + ((float)gh * k); //pressure correction
             // fallback
             if (press_corr < 800 || press_corr > 1200) {
                 press_corr = press;

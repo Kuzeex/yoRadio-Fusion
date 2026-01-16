@@ -370,7 +370,18 @@ void audio_id3data(const char *info) {
 
 void audio_eof() {
   config.sdResumePos = 0;
-  player.next();
+
+  if (config.getMode() == PM_SDCARD) {
+    player.next();
+    return;
+  }
+
+#ifdef USE_DLNA //DLNA mod
+  if (config.store.playlistSource == PL_SRC_DLNA) {
+    player.next();
+    return;
+  }
+#endif
 }
 
 void audio_progress(uint32_t startpos, uint32_t endpos) {
