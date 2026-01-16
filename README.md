@@ -353,6 +353,16 @@ yoRadio-Fusion/
 
 ## 📌 Version History / Changelog
 
+v0.3.9 – 2026-01-16
+
+ • optimizing websocket messages and http endpoint communications
+ 
+ • new display type added: ST7735 (black_conf) 160x128px
+ 
+ • To ensure correct display of air pressure data, the pressure slope correction factor has been moved to the WebUI. (Pressure slope: linear gradient, typically ~0.11–0.12 hPa per meter (within normal weather ranges, at low to medium altitudes))
+
+ 
+ 
 v0.3.5 – 2025-12-08
 
  • SD reading BUG fix (special thanks to Tamás Várai)
@@ -366,8 +376,6 @@ v0.3.5 – 2025-12-08
  • Weather icon placement on 480×xxx and 320×xxx displays
 
  ![JC4827W543_weather](https://github.com/user-attachments/assets/a4e87d51-e22a-4b37-8219-0c410be00149)
-
- 
 
 ## 🙌 Credits
 
