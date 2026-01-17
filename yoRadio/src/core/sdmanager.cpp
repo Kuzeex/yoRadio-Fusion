@@ -8,13 +8,8 @@
 //#define USE_SD
 #include "config.h"
 #include "sdmanager.h"
-#include "spidog.h"
 #include "display.h"
 #include "player.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
-
-extern SemaphoreHandle_t spiMutex;
 
 #if defined(SD_SPIPINS) || SD_HSPI
 SPIClass  SDSPI(HSPI);
@@ -29,49 +24,33 @@ SPIClass  SDSPI(HSPI);
 
 SDManager sdman(FSImplPtr(new VFSImpl()));
 
-bool SDManager::start() {
-  sdog.begin();
-  bool ok = false;
-
-  if (xSemaphoreTake(spiMutex, portMAX_DELAY)) {
-    ready = begin(SDC_CS, SDREALSPI, SDSPISPEED);
-    vTaskDelay(10);
-    if (!ready) ready = begin(SDC_CS, SDREALSPI, SDSPISPEED);
-    vTaskDelay(20);
-    if (!ready) ready = begin(SDC_CS, SDREALSPI, SDSPISPEED);
-    vTaskDelay(50);
-    if (!ready) ready = begin(SDC_CS, SDREALSPI, SDSPISPEED);
-    ok = ready;
-    xSemaphoreGive(spiMutex);
-  }
-  return ok;
+bool SDManager::start(){
+  ready = begin(SDC_CS, SDREALSPI, SDSPISPEED);
+  vTaskDelay(10);
+  if(!ready) ready = begin(SDC_CS, SDREALSPI, SDSPISPEED);
+  vTaskDelay(20);
+  if(!ready) ready = begin(SDC_CS, SDREALSPI, SDSPISPEED);
+  vTaskDelay(50);
+  if(!ready) ready = begin(SDC_CS, SDREALSPI, SDSPISPEED);
+  return ready;
 }
 
-
-void SDManager::stop() {
-  if (xSemaphoreTake(spiMutex, portMAX_DELAY)) {
-    end();
-    ready = false;
-    xSemaphoreGive(spiMutex);
-  }
+void SDManager::stop(){
+  end();
+  ready = false;
 }
-
 #include "diskio_impl.h"
 bool SDManager::cardPresent() {
-  if (!ready) return false;
-  bool result = false;
-  if (xSemaphoreTake(spiMutex, portMAX_DELAY)) {
-    if (sectorSize() < 1) result = false;
-    else {
-      uint8_t buff[sectorSize()] = {0};
-      bool bread = readRAW(buff, 1);
-      result = (sectorSize() > 0 && bread);
-    }
-    xSemaphoreGive(spiMutex);
-  }
-  return result;
-}
 
+  if(!ready) return false;
+  if(sectorSize()<1) {
+    return false;
+  }
+  uint8_t buff[sectorSize()] = { 0 };
+  bool bread = readRAW(buff, 1);
+  if(sectorSize()>0 && !bread) return false;
+  return bread;
+}
 
 bool SDManager::_checkNoMedia(const char* path){
   if (path[strlen(path) - 1] == '/')
@@ -128,9 +107,7 @@ void SDManager::listSD(File &plSDfile, File &plSDindex, const char* dirname, uin
                 plSDfile.printf("%s\t%s\t0\n", fn, filePath);
                 plSDindex.write((uint8_t*)&pos, 4);
                 Serial.print(".");
-                if (display.mode() == SDCHANGE && !_sdFCount) {
-                    display.putRequest(SDFILEINDEX, 0); 
-                }
+                if(display.mode()==SDCHANGE) display.putRequest(SDFILEINDEX, _sdFCount+1);
                 _sdFCount++;
                 if (_sdFCount % 64 == 0) Serial.println();
             }
@@ -142,28 +119,21 @@ void SDManager::listSD(File &plSDfile, File &plSDindex, const char* dirname, uin
 
 void SDManager::indexSDPlaylist() {
   _sdFCount = 0;
-  if (xSemaphoreTake(spiMutex, portMAX_DELAY)) {
-    if (exists(PLAYLIST_SD_PATH)) remove(PLAYLIST_SD_PATH);
-    if (exists(INDEX_SD_PATH)) remove(INDEX_SD_PATH);
-    File playlist = open(PLAYLIST_SD_PATH, "w", true);
-    if (!playlist) { xSemaphoreGive(spiMutex); return; }
-    File index = open(INDEX_SD_PATH, "w", true);
-    xSemaphoreGive(spiMutex);
-
-    listSD(playlist, index, "/", SD_MAX_LEVELS);
-
-    if (xSemaphoreTake(spiMutex, portMAX_DELAY)) {
-      index.flush();
-      index.close();
-      playlist.flush();
-      playlist.close();
-      xSemaphoreGive(spiMutex);
-    }
+  if(exists(PLAYLIST_SD_PATH)) remove(PLAYLIST_SD_PATH);
+  if(exists(INDEX_SD_PATH)) remove(INDEX_SD_PATH);
+  File playlist = open(PLAYLIST_SD_PATH, "w", true);
+  if (!playlist) {
+    return;
   }
+  File index = open(INDEX_SD_PATH, "w", true);
+  listSD(playlist, index, "/", SD_MAX_LEVELS);
+  index.flush();
+  index.close();
+  playlist.flush();
+  playlist.close();
   Serial.println();
   delay(50);
 }
-
 #endif
 
 

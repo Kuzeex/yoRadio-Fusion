@@ -435,7 +435,7 @@ bool _getWeather() {
             }
             int gh = (int)config.store.grndHeight;  //m
             float k = (float)config.store.pressureSlope_x1000 / 1000.0f;
-            float press_corr = (float)press + ((float)gh * k); //pressure correction
+            float press_corr = (float)press - ((float)gh * k); //pressure correction
             // fallback
             if (press_corr < 800 || press_corr > 1200) {
                 press_corr = press;
