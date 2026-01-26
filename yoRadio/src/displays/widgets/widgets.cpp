@@ -1120,6 +1120,8 @@ void ClockWidget::_printClock(bool force){
   const int16_t secBaseY = colCenter - (secCellH / 2);
   const int16_t secLeftFull    = timeLeft + timeWidthLive + _space*2;
   
+  int16_t divY = -1;
+  
   static const GFXfont* s_lastPrintFont = nullptr;
   if (Clock_GFXfontPtr != s_lastPrintFont) {
     _getTimeBounds();
@@ -1174,39 +1176,78 @@ void ClockWidget::_printClock(bool force){
       bool fullClockOnScreensaver = (!config.isScreensaver || (_fb->ready() && FULL_SCR_CLOCK));
       _linesleft = _left()+_timewidth+_space;
       if(fullClockOnScreensaver){
-        int16_t hlineY  = secBaseY + secCellH;
-        if (hlineY >= _top()) hlineY = _top() - 1;
-    #ifdef AM_PM_STYLE
-        gfx.drawFastVLine(_linesleft, secBaseY - 5, _top() - secBaseY + 10, config.theme.div);
-        gfx.setFont();
-        if(TIME_SIZE==70) {
-          gfx.drawFastHLine(_linesleft, hlineY + _space/2 -8, CHARWIDTH * _superfont * 2 + _space +15, config.theme.div);
-          gfx.setCursor(_linesleft+_space+1, hlineY + CHARHEIGHT - 2);  //másodperc alatt
-          gfx.setTextSize(2);
-        } 
-        if(TIME_SIZE==52) {
-          gfx.drawFastHLine(_linesleft, hlineY + _space/2 -8, CHARWIDTH * _superfont * 2 + _space +15, config.theme.div);
-          gfx.setCursor(_linesleft+_space+1, hlineY + CHARHEIGHT - 8);  //másodperc alatt
-          gfx.setTextSize(2);
-        }
-        if(TIME_SIZE==35) {
-          gfx.drawFastHLine(_linesleft, hlineY + _space/2 -8, CHARWIDTH * _superfont * 2 + _space +15, config.theme.div);
-          gfx.setCursor(_linesleft+_space+1, hlineY + CHARHEIGHT - 12);  //másodperc alatt
-          gfx.setTextSize(2);
-        }
-        if(TIME_SIZE==19) {
-          gfx.drawFastHLine(_linesleft, hlineY + _space/2 -4, CHARWIDTH * _superfont * 2 + _space +15, config.theme.div);
-          gfx.setCursor(_linesleft+_space+1, hlineY + CHARHEIGHT - 8);  //másodperc alatt
-          gfx.setTextSize(1);
-        }
-        gfx.setTextColor(config.theme.dow, config.theme.background);
-        char buf[3];
-        strftime(buf, sizeof(buf), "%p", &network.timeinfo);
-        gfx.print(buf);  // AM vagy PM kiírása
-    #else
-        gfx.drawFastVLine(_linesleft, secBaseY, _top() - secBaseY , config.theme.div);
-        gfx.drawFastHLine(_linesleft, hlineY + _space/2, CHARWIDTH * _superfont * 2 + _space, config.theme.div);
-    #endif
+int16_t hlineBaseY = secBaseY + secCellH;
+if (hlineBaseY >= _top()) hlineBaseY = _top() - 1;
+
+#ifdef AM_PM_STYLE
+
+  // függőleges elválasztó (marad, ahogy volt)
+  gfx.drawFastVLine(
+    _linesleft,
+    secBaseY - 5,
+    _top() - secBaseY + 10,
+    config.theme.div
+  );
+
+  gfx.setFont();
+
+  // ---- VÍZSZINTES VONAL Y KISZÁMÍTÁSA (EGY HELYEN!) ----
+  int16_t yLine;
+  int16_t ampmTextY;
+  uint8_t ampmTextSize;
+
+  if (TIME_SIZE == 19) {
+    yLine        = hlineBaseY + _space/2 - 4;
+    ampmTextY    = hlineBaseY + CHARHEIGHT - 8;
+    ampmTextSize = 1;
+  } else {
+    yLine        = hlineBaseY + _space/2 - 8;
+    ampmTextY    = hlineBaseY +
+                   (TIME_SIZE == 70 ? CHARHEIGHT - 2 :
+                    TIME_SIZE == 52 ? CHARHEIGHT - 8 :
+                                      CHARHEIGHT - 12);
+    ampmTextSize = 2;
+  }
+
+  // ---- VONAL RAJZOLÁS + ELMENTÉS ----
+  gfx.drawFastHLine(
+    _linesleft,
+    yLine,
+    CHARWIDTH * _superfont * 2 + _space + 15,
+    config.theme.div
+  );
+  divY = yLine;   // 🔑 EZ AZ EGÉSZ TRÜKK LÉNYEGE
+
+  // ---- AM / PM FELIRAT ----
+  gfx.setCursor(_linesleft + _space + 1, ampmTextY);
+  gfx.setTextSize(ampmTextSize);
+  gfx.setTextColor(config.theme.dow, config.theme.background);
+
+  char buf[3];
+  strftime(buf, sizeof(buf), "%p", &network.timeinfo);
+  gfx.print(buf);
+
+#else  // ----- 24 ÓRÁS NÉZET -----
+
+  gfx.drawFastVLine(
+    _linesleft,
+    secBaseY,
+    _top() - secBaseY,
+    config.theme.div
+  );
+
+  int16_t yLine = hlineBaseY + _space/2;
+
+  gfx.drawFastHLine(
+    _linesleft,
+    yLine,
+    CHARWIDTH * _superfont * 2 + _space,
+    config.theme.div
+  );
+  divY = yLine;   // itt is eltároljuk, egységesen
+
+#endif
+
         formatDateCustom(_tmp, sizeof(_tmp), ti, config.store.dateFormat);
         #ifndef HIDE_DATE
         strlcpy(_datebuf, utf8To(_tmp, true), sizeof(_datebuf));
@@ -1223,41 +1264,216 @@ void ClockWidget::_printClock(bool force){
       }
     }
   }
-  if(_fullclock || _superfont>0){
+
+// ------------------------------------------------------------
+// FULLCLOCK: vonalak + AM/PM (vagy 24h) + dátum
+// ------------------------------------------------------------
+if (_fullclock) {
+  bool fullClockOnScreensaver = (!config.isScreensaver || (_fb->ready() && FULL_SCR_CLOCK));
+  _linesleft = _left() + _timewidth + _space;
+
+  if (fullClockOnScreensaver) {
+
+    int16_t hlineBaseY = secBaseY + secCellH;
+    if (hlineBaseY >= _top()) hlineBaseY = _top() - 1;
+
+#ifdef AM_PM_STYLE
+    // függőleges elválasztó (marad)
+    gfx.drawFastVLine(_linesleft, secBaseY - 5, _top() - secBaseY + 10, config.theme.div);
+
+    gfx.setFont();
+
+    // ---- VÍZSZINTES VONAL + AM/PM szöveg pozíció (EGY HELYEN) ----
+    int16_t yLine = 0;
+    int16_t ampmTextY = 0;
+    uint8_t ampmTextSize = 2;
+
+    if (TIME_SIZE == 19) {
+      yLine        = hlineBaseY + _space/2 - 4;
+      ampmTextY    = hlineBaseY + CHARHEIGHT - 8;
+      ampmTextSize = 1;
+    } else if (TIME_SIZE == 70) {
+      yLine        = hlineBaseY + _space/2 - 8;
+      ampmTextY    = hlineBaseY + CHARHEIGHT - 2;
+      ampmTextSize = 2;
+    } else if (TIME_SIZE == 52) {
+      yLine        = hlineBaseY + _space/2 - 8;
+      ampmTextY    = hlineBaseY + CHARHEIGHT - 8;
+      ampmTextSize = 2;
+    } else { // pl. 35, stb.
+      yLine        = hlineBaseY + _space/2 - 8;
+      ampmTextY    = hlineBaseY + CHARHEIGHT - 12;
+      ampmTextSize = 2;
+    }
+
+    // vonal rajzolás + divY mentése
+    gfx.drawFastHLine(_linesleft, yLine, CHARWIDTH * _superfont * 2 + _space + 15, config.theme.div);
+    divY = yLine;
+
+    // AM/PM felirat
+    gfx.setCursor(_linesleft + _space + 1, ampmTextY);
+    gfx.setTextSize(ampmTextSize);
+    gfx.setTextColor(config.theme.dow, config.theme.background);
+
+    char buf[3];
+    strftime(buf, sizeof(buf), "%p", &network.timeinfo);
+    gfx.print(buf);
+
+#else
+    // 24 órás
+    gfx.drawFastVLine(_linesleft, secBaseY, _top() - secBaseY, config.theme.div);
+
+    const int16_t yLine = hlineBaseY + _space/2;
+    gfx.drawFastHLine(_linesleft, yLine, CHARWIDTH * _superfont * 2 + _space, config.theme.div);
+    divY = yLine;
+#endif
+
+    // dátum (ha nincs HIDE_DATE)
+    formatDateCustom(_tmp, sizeof(_tmp), ti, config.store.dateFormat);
+#ifndef HIDE_DATE
+    strlcpy(_datebuf, utf8To(_tmp, true), sizeof(_datebuf));
+    uint16_t _datewidth = strlen(_datebuf) * CHARWIDTH * _dateheight;
+    gfx.setTextSize(_dateheight);
+#if DSP_MODEL==DSP_GC9A01A || DSP_MODEL==DSP_GC9A01 || DSP_MODEL==DSP_GC9A01_I80
+    gfx.setCursor((dsp.width() - _datewidth) / 2, _top() + _space);
+#else
+    gfx.setCursor(_left() + _clockwidth - _datewidth, _top() + _space);
+#endif
+    gfx.setTextColor(config.theme.date, config.theme.background);
+    gfx.print(_datebuf);
+#endif
+  }
+}
+
+// ------------------------------------------------------------
+// SECONDS: GFX small font + törlés a divY-ig clampelve
+// ------------------------------------------------------------
+if (_fullclock || _superfont > 0) {
+
+  // seconds érték
+  int sec = ti.tm_sec;
+  if (_lastSec >= 0) {
+    int diff = sec - _lastSec;
+    if (diff < 0 && diff > -3) sec = _lastSec;
+  }
+  _lastSec = sec;
+  sprintf(_tmp, "%02d", sec);
+
+  const uint8_t fid = clockfont_clamp_id(config.store.clockFontId);
+  const GFXfont* secFont = clockfont_get_small(fid);
+
+  // 🔑 TIME_SIZE==19: mindig fallback (túl kicsi a glyph-özéshez)
+  const bool forceFallback19 = (TIME_SIZE == 19);
+  const bool useGfxSecFont   = (!forceFallback19 && secFont != nullptr);
+
+  int16_t x = secLeftFull;
+  int16_t y = secBaseY;
+
+  // cella méret (fallback alap)
+  int16_t secCellW = CHARWIDTH * _superfont * 2;
+
+  // --- Pozíció: GFXfont esetén (CSAK ha nem TIME_SIZE==19) ---
+  if (useGfxSecFont) {
+    int8_t bl = clockfont_baseline_small(fid);
+
+    // Y pozíció (baseline)
+    y = secBaseY + secCellH + bl - 2;
+#ifdef AM_PM_STYLE
+    y -= 7;
+#endif
+
+    // "88" bounding box (szélesség + tbx kompenzáció)
+    int16_t tbx, tby;
+    uint16_t tbw, tbh;
+
+    gfx.setFont(secFont);
+    gfx.setTextSize(1);
+    gfx.getTextBounds("88", 0, 0, &tbx, &tby, &tbw, &tbh);
+
+    // secCellW maradhat a fallback szélesség (fix cella), csak x-et számoljuk abból
+    // (ha te nálad jobb, hogy tbw legyen a cella, itt átírhatod: secCellW = tbw;)
+    x = secLeftFull + (secCellW - (int16_t)tbw) / 2 - tbx;
+  } else {
+    // --- Fallback (ide tartozik a TIME_SIZE==19 trükk) ---
+    // Itt tedd meg azt az X ofszetet, ami "tökéletes lett" nálad:
+    // (példa: picit balra húzom)
+    if (forceFallback19) {
+      x = secLeftFull + 1;   // <-- EZT az értéket hagyd azon, ami nálad bevált (pl. +1 / 0 / -1)
+    }
+  }
+
+  // --- TÖRLÉS: clamp a divY-ig ---
+  const int16_t clearAbove = secCellH / 2;
+  const int16_t clearBelow = secCellH;
+
+  int16_t clearTop    = secBaseY - clearAbove;
+  int16_t clearBottom = secBaseY + clearBelow;
+
+  if (divY >= 0 && clearBottom >= divY) {
+    clearBottom = divY - 1;
+  }
+  const int16_t clearH = clearBottom - clearTop;
+
+  if (clearH > 0) {
+
+    // 🔑 TIME_SIZE==19 fallback: ne terjeszd balra (ne törölj bele az órába / függőleges vonalba)
+    if (forceFallback19) {
+      const int16_t PAD_R = 6;   // csak jobbra bővítünk
+      gfx.fillRect(
+        secLeftFull,
+        clearTop,
+        secCellW + PAD_R,
+        clearH,
+        config.theme.background
+      );
+    } else {
+      // Normál (glyph vagy nem-19 fallback): eredeti, "szűk" törlés
+      gfx.fillRect(
+        secLeftFull-2,
+        clearTop,
+        secCellW+4,
+        clearH,
+        config.theme.background
+      );
+    }
+  }
+
+  // --- MONO maszk "88" (ha kell) ---
+  if (config.store.clockFontMono) {
+    gfx.setTextColor(config.theme.clockbg, config.theme.background);
+
+    if (useGfxSecFont) {
+      gfx.setFont(secFont);
+      gfx.setTextSize(1);
+      gfx.setCursor(x, y);
+      gfx.print("88");
+    } else {
+      gfx.setFont();
+      gfx.setTextSize(_superfont);
+      gfx.setCursor(x, secBaseY);
+      gfx.print("88");
+    }
+  }
+
+  // --- valódi seconds ---
+  gfx.setTextColor(
+    config.theme.seconds,
+    config.store.clockFontMono ? config.theme.clockbg : config.theme.background
+  );
+
+  if (useGfxSecFont) {
+    gfx.setFont(secFont);
+    gfx.setTextSize(1);
+    gfx.setCursor(x, y);
+  } else {
     gfx.setFont();
     gfx.setTextSize(_superfont);
-    if(!_fullclock){
-      gfx.setCursor(timeLeft + timeWidthLive + _space, secBaseY);
-      #ifndef CLOCKFONT5x7
-      gfx.setCursor(timeLeft + timeWidthLive + _space, secBaseY);
-      #else
-      gfx.setCursor(timeLeft + timeWidthLive + _space, secBaseY);
-      #endif
-    }else{
-    #ifdef AM_PM_STYLE
-        if(TIME_SIZE==19) {
-          gfx.setCursor(secLeftFull+1, secBaseY-4);
-        } else {
-          gfx.setCursor(secLeftFull, secBaseY-8);
-        }  
-    #else
-       if(TIME_SIZE==19) {
-         gfx.setCursor(secLeftFull+1, secBaseY);
-       } else {
-         gfx.setCursor(secLeftFull, secBaseY);
-       }  
-    #endif
-    }
-    int sec = ti.tm_sec;
-    if (_lastSec >= 0) {
-      int diff = sec - _lastSec;
-      if (diff < 0 && diff > -3) sec = _lastSec;   // clamp
-    }
-    gfx.setTextColor(config.theme.seconds, config.theme.background);
-    sprintf(_tmp, "%02d", sec);
-    gfx.print(_tmp);
-    _lastSec = sec;
+    gfx.setCursor(x, secBaseY);
   }
+
+  gfx.print(_tmp);
+}
+
   applyClockFontFromConfig();
   gfx.setTextSize(Clock_GFXfontPtr==nullptr?TIME_SIZE:1);
   gfx.setFont(Clock_GFXfontPtr);

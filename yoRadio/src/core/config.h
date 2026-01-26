@@ -54,7 +54,7 @@ enum playMode_e : uint8_t {  //DLNA mod
   PM_SDCARD = 1,
 };
 
-#ifdef USE_DLNA  //DLNA mod
+#ifdef USE_DLNA
 enum PlaylistSource : uint8_t {
   PL_SRC_WEB  = 0,
   PL_SRC_DLNA = 1
@@ -206,6 +206,7 @@ struct config_t
   char      ttsDndStop[8]; 
   bool      ttsDuringPlayback;
   bool      clockFontMono;
+  uint8_t   metaStNameSkip;
   uint16_t  abuff;
   bool      telnet;
   bool      watchdog;
@@ -418,9 +419,7 @@ class Config {
 };
 
 extern Config config;
-#ifdef USE_DLNA //DLNA mod
-extern volatile bool g_dlnaBuilding;
-#endif
+
 #if DSP_HSPI || TS_HSPI || VS_HSPI
 extern SPIClass  SPI2;
 #endif

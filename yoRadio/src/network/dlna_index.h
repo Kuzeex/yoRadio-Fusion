@@ -35,7 +35,7 @@ private:
 
   String buildBrowseEnvelope(const String& objectId, uint32_t start, uint32_t count);
   void decodeEntities(String& s);
-
+  String beautifyTitle(const String& raw);
   // DIDL parsers
   void extractContainersFromDIDL(const String& didl, std::vector<String>& ids, std::vector<String>& titles);
   void extractItemsFromDIDL(const String& didl, std::vector<String>& ids, std::vector<String>& titles, std::vector<String>& urls);

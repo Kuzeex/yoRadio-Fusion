@@ -217,6 +217,17 @@ void handleSet(AsyncWebServerRequest *request) {
     }
   }
 
+  // --- META Station Name Skip ---
+  if (request->hasParam("metaStNameSkip")) {
+    touched = true;
+    uint8_t v = request->getParam("metaStNameSkip")->value().toInt() ? 1 : 0;
+    if (v != config.store.metaStNameSkip) {
+      config.store.metaStNameSkip   = v;
+      changed = true;
+      display.putRequest(NEWSTATION);
+    }
+  }
+
   // --- TTS enabled ---
   if (request->hasParam("ttsEnabled")) {
     touched = true;

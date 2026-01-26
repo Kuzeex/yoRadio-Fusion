@@ -543,9 +543,7 @@ void Display::loop() {
     return;
   }
   if(displayQueue==NULL || _locked) return;
-#ifdef USE_DLNA //DLNA mod
-  if (g_dlnaBuilding) return;
-#endif
+
   _pager->loop();
 #ifdef USE_NEXTION
   nextion.loop();
@@ -1030,9 +1028,7 @@ void Display::_start(){
 
 void Display::putRequest(displayRequestType_e type, int payload){
   if(type==DSP_START) _start();
-#ifdef USE_DLNA  //DLNA mod
-  if (g_dlnaBuilding) return;
-#endif
+
   #ifdef USE_NEXTION
     requestParams_t request;
     request.type = type;

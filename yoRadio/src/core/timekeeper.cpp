@@ -198,9 +198,6 @@ void TimeKeeper::_doAfterWait() {
   }
 }*/
 void TimeKeeper::_upClock() {
-#ifdef USE_DLNA //DLNA mod
-  if (g_dlnaBuilding) return;
-#endif
   struct tm ti;
   time_t now = time(nullptr);
 
@@ -252,9 +249,6 @@ void TimeKeeper::_upScreensaver() {
 }
 
 void TimeKeeper::_upRSSI() {
-#ifdef USE_DLNA //DLNA mod
-  if (g_dlnaBuilding) return;
-#endif
   if (network.status == CONNECTED) {
     netserver.setRSSI(WiFi.RSSI());
     netserver.requestOnChange(NRSSI, 0);
@@ -277,9 +271,6 @@ void TimeKeeper::_upSDPos() {
 }
 
 void TimeKeeper::timeTask() {
-#ifdef USE_DLNA //DLNA mod
-  if (g_dlnaBuilding) return;
-#endif
   static uint8_t tsFailCnt = 0;
   config.waitConnection();
   if (getLocalTime(&network.timeinfo)) {
@@ -304,9 +295,6 @@ void TimeKeeper::timeTask() {
   }
 }
 void TimeKeeper::weatherTask() {
-#ifdef USE_DLNA //DLNA mod
-  if (g_dlnaBuilding) return;
-#endif
   forceWeather = false;
   if (!weatherBuf || strlen(config.store.weatherkey) == 0 || !config.store.showweather) {
     return;

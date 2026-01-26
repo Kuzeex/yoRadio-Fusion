@@ -16,6 +16,10 @@
 #include "displays/nextion.h"
 #endif
 #include "core/audiohandlers.h"
+#ifdef USE_DLNA //DLNA mod
+#include "network/dlna_service.h"
+#endif
+
 #if USE_OTA
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
 #include <NetworkUdp.h>

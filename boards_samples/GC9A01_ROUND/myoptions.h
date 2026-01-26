@@ -56,10 +56,10 @@
 #define I2S_LRC              4
 
 /* Encoder1 */
-#define ENC_BTNL             38
-#define ENC_BTNB             39
-#define ENC_BTNR             44
-#define ENC_INTERNALPULLUP   false
+//#define ENC_BTNL             38
+//#define ENC_BTNB             39
+//#define ENC_BTNR             44
+//#define ENC_INTERNALPULLUP   false
 
 /* Encoder2 */
 //#define ENC2_BTNR             46

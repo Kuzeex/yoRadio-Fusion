@@ -285,8 +285,9 @@ bool DlnaIndex::appendTracksToFile(const String& didl, fs::File& f, uint32_t& ap
     const String& url   = iurls[i];
     if (!title.length() || !url.length()) continue;
 
+    String nice = beautifyTitle(title);
     // YO format: title \t url \t 0
-    f.printf("%s\t%s\t0\n", title.c_str(), url.c_str());
+    f.printf("%s\t%s\t0\n", nice.c_str(), url.c_str());
     appended++;
   }
   return true;
@@ -297,6 +298,7 @@ bool DlnaIndex::autoBuildPlaylist(const String& controlUrl,
                                   uint8_t maxDepth,
                                   uint32_t hardLimit)
 {
+  if (hardLimit == 0) hardLimit = 20000;
   // ===== SPIFFS sanity check =====
   File ftest = SPIFFS.open(TMP_PATH, "w");
   if (!ftest) {
@@ -421,6 +423,194 @@ bool DlnaIndex::buildContainerIndex(const String& controlUrl, const String& root
   Serial.printf("[DLNA][IDX] %u containers written\n", (unsigned)cids.size());
   return true;
 }
+
+// ================================================================
+// beautifyTitle  => "Album - [CD# -] TrackTitle"   (NO artist)
+// ================================================================
+static inline String _trimCopy(String s) { s.trim(); return s; }
+
+static bool _looksLikeDiscToken(const String& s) {
+  String t = s; t.trim();
+  if (!t.length()) return false;
+
+  String u = t; u.toUpperCase();
+
+  // CD2, CD 2, DISC2, DISC 2, DISK2, VOL2, VOL.2, VOLUME 2
+  if (u.startsWith("CD"))   return true;
+  if (u.startsWith("DISC")) return true;
+  if (u.startsWith("DISK")) return true;
+  if (u.startsWith("VOL"))  return true;
+  if (u.startsWith("VOLUME")) return true;
+
+  return false;
+}
+
+static String _removeLeadingTrackNo(String s) {
+  s.trim();
+  if (!s.length()) return s;
+
+  // "01 - " / "1 - " / "01." / "1."
+  // remove leading digits + optional spaces + (" - " or ".")
+  int i = 0;
+  while (i < (int)s.length() && isdigit((uint8_t)s[i])) i++;
+  if (i == 0) return s;
+
+  // skip spaces
+  while (i < (int)s.length() && s[i] == ' ') i++;
+
+  // " - "
+  if (i + 2 < (int)s.length() && s[i] == '-' ) {
+    // handle "- " or "-   "
+    i++;
+    while (i < (int)s.length() && s[i] == ' ') i++;
+    return _trimCopy(s.substring(i));
+  }
+
+  // "."
+  if (i < (int)s.length() && s[i] == '.') {
+    i++;
+    while (i < (int)s.length() && s[i] == ' ') i++;
+    return _trimCopy(s.substring(i));
+  }
+
+  return s;
+}
+
+static String _stripExtension(String s) {
+  int dot = s.lastIndexOf('.');
+  if (dot > 0) s = s.substring(0, dot);
+  s.trim();
+  return s;
+}
+
+static String _stripTrailingParenGroup(String s) {
+  // remove trailing " (....)" if it's at the end
+  s.trim();
+  if (!s.endsWith(")")) return s;
+
+  int lp = s.lastIndexOf(" (");
+  int rp = s.lastIndexOf(')');
+  if (lp >= 0 && rp == (int)s.length() - 1 && rp > lp + 2) {
+    s = s.substring(0, lp);
+    s.trim();
+  }
+  return s;
+}
+
+static void _splitBySlash(const String& in, String& left, String& right) {
+  int slash = in.lastIndexOf('/');
+  if (slash >= 0) {
+    left  = in.substring(0, slash);
+    right = in.substring(slash + 1);
+  } else {
+    left = in;
+    right = "";
+  }
+  left.trim();
+  right.trim();
+}
+
+static void _splitByDashTokens(const String& in, std::vector<String>& out) {
+  out.clear();
+  String s = in;
+  s.trim();
+  int from = 0;
+  while (true) {
+    int p = s.indexOf(" - ", from);
+    if (p < 0) {
+      String tail = s.substring(from);
+      tail.trim();
+      if (tail.length()) out.push_back(tail);
+      break;
+    }
+    String part = s.substring(from, p);
+    part.trim();
+    if (part.length()) out.push_back(part);
+    from = p + 3;
+  }
+}
+
+String DlnaIndex::beautifyTitle(const String& raw) {
+  String t = raw;
+  t.trim();
+  if (!t.length()) return t;
+
+  // Normalize double spaces
+  while (t.indexOf("  ") >= 0) t.replace("  ", " ");
+
+  // Split by last '/'
+  String left, right;
+  _splitBySlash(t, left, right);
+
+  // Track title candidate:
+  // - If we have "01 - Title/..." => left has the track title part
+  // - If FLAC filename: "Artist - Title (...).flac" is in left (or in t when no slash)
+  String track = left.length() ? left : t;
+  track = _stripExtension(track);
+  track = _removeLeadingTrackNo(track);
+
+  // If it's "Artist - Title" format, keep ONLY the "Title" part
+  int dash = track.indexOf(" - ");
+  if (dash >= 0) {
+    track = track.substring(dash + 3);
+    track.trim();
+  }
+
+  // Remove trailing " (....)" release tag from track title (FLAC case)
+  track = _stripTrailingParenGroup(track);
+
+  // Album candidate:
+  // - If there is a right side (after '/'), that's usually album-ish
+  // - Else fallback: try to derive from "Artist - Album" patterns (rare here)
+  String album = right;
+
+  // If right side contains "Artist - Album - CD2" or similar: take LAST meaningful token as album
+  if (album.length()) {
+    std::vector<String> toks;
+    _splitByDashTokens(album, toks);
+
+    if (toks.size() >= 2) {
+      // last may be disc token
+      String last = toks[toks.size() - 1];
+      bool hasDisc = _looksLikeDiscToken(last);
+
+      String disc = hasDisc ? last : "";
+      String alb  = hasDisc ? toks[toks.size() - 2] : last;
+
+      alb.trim();
+      disc.trim();
+
+      // result album part: "Album" or "Album - CD2"
+      album = alb;
+      if (disc.length()) album += " - " + disc;
+    } else {
+      // single token => treat as album as-is
+      album.trim();
+    }
+  }
+
+  // If still no album (no slash case), keep original behavior minimally
+  if (!album.length()) {
+    // last-resort: if original has " - " tokens, take the last token as album
+    std::vector<String> toks;
+    _splitByDashTokens(t, toks);
+    if (toks.size() >= 2) {
+      album = toks.back();
+      album.trim();
+    }
+  }
+
+  // Compose: "Album - Track"
+  if (album.length() && track.length()) {
+    return album + " - " + track;
+  }
+
+  // Fallback: just track
+  if (track.length()) return track;
+
+  return t;
+}
+
 
 #endif // USE_DLNA
 

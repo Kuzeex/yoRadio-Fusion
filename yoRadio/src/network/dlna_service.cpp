@@ -5,17 +5,16 @@
 #include "dlna_ssdp.h"
 #include "dlna_desc.h"
 #include "dlna_index.h"
+#include "dlna_worker.h"
 #include "../core/network.h"
 #include "../core/player.h"
 
 String g_dlnaControlUrl;
 
-bool dlnaInit(const String& rootObjectId, String& err) {
+static bool s_serviceStarted = false;
+static uint32_t s_reqId = 1;
 
-  if (network.status != CONNECTED) {
-    err = "WiFi not connected";
-    return false;
-  }
+bool dlnaInit(const String& rootObjectId, String& err) {
 
   player.sendCommand({PR_STOP, 0});
 
@@ -53,6 +52,23 @@ bool dlnaInit(const String& rootObjectId, String& err) {
   }
 
   return true;
+}
+
+void dlna_service_begin() {
+  if (s_serviceStarted) return;
+  s_serviceStarted = true;
+
+  dlna_worker_start();
+}
+
+uint32_t dlna_next_reqId() {
+  uint32_t v = s_reqId++;
+  if (v == 0) v = s_reqId++; // 0 ne legyen
+  return v;
+}
+
+bool dlna_isBusy() {
+  return g_dlnaStatus.busy;
 }
 
 #endif   // USE_DLNA

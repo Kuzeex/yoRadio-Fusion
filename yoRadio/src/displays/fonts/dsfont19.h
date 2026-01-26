@@ -41,16 +41,16 @@
 #include "Decoderr14pt7b_mono.h"
 #undef  Clock_GFXfont
 
-struct ClockFontSpec { const GFXfont* font; int8_t baseline; uint8_t adv; };
+struct ClockFontSpec { const GFXfont* font; const GFXfont* fontSmall; int8_t  baseline; int8_t  baselineSmall; uint8_t adv; };
 
 static const ClockFontSpec CLOCK_FONTS[] PROGMEM = {
-  { &DS_DIGI15pt7b_mono,          0, 14 },
-  { &PointedlyMad14pt7b_mono,     0, 14 },
-  { &Office14pt7b_mono,           0, 14 },
-  { &Oldtimer10pt7b_mono,         0, 14 },
-  { &LaradotSerif14pt7b_mono,     0, 14 },
-  { &SquareFont14pt7b_mono,       0, 14 },
-  { &Decoderr14pt7b_mono,         0, 14 },
+  { &DS_DIGI15pt7b_mono,         nullptr, 0, 0, 14 },
+  { &PointedlyMad14pt7b_mono,    nullptr, 0, 0, 14 },
+  { &Office14pt7b_mono,          nullptr, 0, 0, 14 },
+  { &Oldtimer10pt7b_mono,        nullptr, 0, 0, 14 },
+  { &LaradotSerif14pt7b_mono,    nullptr, 0, 0, 14 },
+  { &SquareFont14pt7b_mono,      nullptr, 0, 0, 14 },
+  { &Decoderr14pt7b_mono,        nullptr, 0, 0, 14 },
 };
 
 inline uint8_t clockfont_count() {
@@ -72,6 +72,14 @@ inline int8_t clockfont_baseline(uint8_t id){
 
 inline uint8_t clockfont_advance(uint8_t id){
   return CLOCK_FONTS[clockfont_clamp_id(id)].adv;
+}
+
+inline const GFXfont* clockfont_get_small(uint8_t id){
+  return CLOCK_FONTS[clockfont_clamp_id(id)].fontSmall;
+}
+
+inline int8_t clockfont_baseline_small(uint8_t id){
+  return CLOCK_FONTS[clockfont_clamp_id(id)].baselineSmall;
 }
 
 #endif

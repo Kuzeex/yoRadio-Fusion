@@ -4639,7 +4639,7 @@ void Audio::playAudioData() {
     bool isStream = false;
 
     if (m_dataMode == AUDIO_LOCALFILE) isFile = true;
-    if (m_streamType == ST_WEBFILE && m_playlistFormat != FORMAT_M3U8) isStream = true; // local file or webfile but not m3u8 file
+    if (m_streamType == ST_WEBFILE && m_playlistFormat != FORMAT_M3U8) isFile = true; // local file or webfile but not m3u8 file
     if (m_streamType == ST_WEBSTREAM || m_playlistFormat == FORMAT_M3U8) isStream = true;
     if (!isFile && !isStream) return;
 

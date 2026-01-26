@@ -20,16 +20,6 @@
 #ifdef USE_DLNA //DLNA mod
   #include "../network/dlna_index.h"
   #include "../network/dlna_service.h"
-static bool g_dlnaInitialized = false;
-static SemaphoreHandle_t g_dlnaMutex = nullptr;
-
-static bool dlnaLock(TickType_t to = pdMS_TO_TICKS(30000)) {
-  if (!g_dlnaMutex) g_dlnaMutex = xSemaphoreCreateMutex();
-  return g_dlnaMutex && (xSemaphoreTake(g_dlnaMutex, to) == pdTRUE);
-}
-static void dlnaUnlock() {
-  if (g_dlnaMutex) xSemaphoreGive(g_dlnaMutex);
-}
 #endif
 
 #if DSP_MODEL==DSP_DUMMY
@@ -105,71 +95,41 @@ bool NetServer::begin(bool quiet) {
 extern String g_dlnaControlUrl;
 
 /* ================= DLNA INIT ================= */
-webserver.on("/dlna/init", HTTP_GET, [](AsyncWebServerRequest *request) {
+webserver.on("/dlna/init", HTTP_GET, [](AsyncWebServerRequest* request) {
 
-  if (!dlnaLock(pdMS_TO_TICKS(15000))) {
-    request->send(429, "application/json",
-      "{\"ok\":false,\"error\":\"DLNA busy\"}");
-    return;
-  }
+  DlnaJob j{};
+  j.type  = DJ_INIT;
+  j.reqId = dlna_next_reqId();
 
-  if (g_dlnaInitialized) {
-    dlnaUnlock();
-    request->send(200, "application/json", "{\"ok\":true,\"cached\":true}");
-    return;
-  }
+  dlna_worker_enqueue(j);
 
-  String err;
-  String rootId = String(dlnaIDX);
-
-  if (!dlnaInit(rootId, err)) {
-    dlnaUnlock();
-    request->send(500, "application/json",
-      String("{\"ok\":false,\"error\":\"") + err + "\"}");
-    return;
-  }
-
-  g_dlnaInitialized = true;
-  dlnaUnlock();
-  request->send(200, "application/json", "{\"ok\":true}");
+  request->send(202, "application/json", "{\"queued\":true}");
 });
 
 /* ================= DLNA LIST ================= */
 webserver.on("/dlna/list", HTTP_GET, [](AsyncWebServerRequest *request) {
 
-  if (!dlnaLock(pdMS_TO_TICKS(15000))) {
-    request->send(429, "application/json",
-      "{\"ok\":false,\"error\":\"DLNA busy\"}");
-    return;
-  }
-
   if (!request->hasParam("objectId")) {
-    dlnaUnlock();
     request->send(400, "application/json",
       "{\"ok\":false,\"error\":\"Missing objectId\"}");
     return;
   }
 
   if (!g_dlnaControlUrl.length()) {
-    dlnaUnlock();
     request->send(503, "application/json",
       "{\"ok\":false,\"error\":\"DLNA not initialized\"}");
     return;
   }
 
   String objectId = request->getParam("objectId")->value();
-
-  uint32_t start = 0;
-  if (request->hasParam("start")) {
-    start = request->getParam("start")->value().toInt();
-  }
+  uint32_t start = request->hasParam("start")
+                     ? request->getParam("start")->value().toInt()
+                     : 0;
 
   String json;
 
   DlnaIndex idx;
   bool ok = idx.listContainer(g_dlnaControlUrl, objectId, json, start);
-
-  dlnaUnlock();
 
   if (!ok) {
     request->send(500, "application/json",
@@ -177,78 +137,84 @@ webserver.on("/dlna/list", HTTP_GET, [](AsyncWebServerRequest *request) {
     return;
   }
 
-  request->send(200, "application/json", json);
+  AsyncWebServerResponse *r =
+    request->beginResponse(200, "application/json", json);
+  r->addHeader("Cache-Control", "no-store");
+  request->send(r);
 });
 
-/* ================= DLNA BUILD ================= */
-webserver.on("/dlna/build", HTTP_GET, [](AsyncWebServerRequest *request) {
 
-  if (!dlnaLock(pdMS_TO_TICKS(60000))) {
-    request->send(429, "text/plain", "DLNA busy");
+/* ================= DLNA BUILD ================= */
+webserver.on("/dlna/build", HTTP_GET, [](AsyncWebServerRequest *request){
+  if (!request->hasParam("objectId")) { request->send(400, "text/plain", "Missing objectId"); return; }
+ 
+  String oid = request->getParam("objectId")->value();
+  Serial.printf("[DLNA][HTTP] %s objectId='%s'\n", "/dlna/build", oid.c_str());
+
+  if (dlna_isBusy()) {
+    request->send(429, "application/json", "{\"queued\":false,\"busy\":true}");
     return;
   }
 
-  g_dlnaBuilding = true;
+  DlnaJob j{};
+  j.type = DJ_BUILD;
+  strlcpy(j.objectId, request->getParam("objectId")->value().c_str(), sizeof(j.objectId));
+  j.reqId = dlna_next_reqId();
+  j.hardLimit = request->hasParam("limit")
+  ? request->getParam("limit")->value().toInt()
+  : 20000;
 
-  bool ok = false;   // eredmény
+  dlna_worker_enqueue(j);
+  char buf[96];
+  snprintf(buf, sizeof(buf), "{\"queued\":true,\"reqId\":%u}", (unsigned)j.reqId);
+  request->send(202, "application/json", "{\"queued\":true}");
+});
 
-  do {   // 👈 scope blokk
+/* ================= DLNA APPEND ================= */
+webserver.on("/dlna/append", HTTP_GET, [](AsyncWebServerRequest *request){
+  if (!request->hasParam("objectId")) { request->send(400, "text/plain", "Missing objectId"); return; }
+  
+  String oid = request->getParam("objectId")->value();
+  Serial.printf("[DLNA][HTTP] %s objectId='%s'\n", "/dlna/append", oid.c_str());
 
-    if (!request->hasParam("objectId")) {
-      request->send(400, "text/plain", "Missing objectId");
-      break;
-    }
+  if (dlna_isBusy()) {
+    request->send(429, "application/json", "{\"queued\":false,\"busy\":true}");
+    return;
+  }
 
-    if (!g_dlnaControlUrl.length()) {
-      request->send(503, "text/plain", "DLNA not initialized");
-      break;
-    }
+  DlnaJob j{};
+  j.type = DJ_APPEND;
+  strlcpy(j.objectId, request->getParam("objectId")->value().c_str(), sizeof(j.objectId));
+  j.reqId = dlna_next_reqId();
+  j.hardLimit = request->hasParam("limit")
+  ? request->getParam("limit")->value().toInt()
+  : 20000;
 
-    const String objectId = request->getParam("objectId")->value();
+  dlna_worker_enqueue(j);
+  char buf[96];
+  snprintf(buf, sizeof(buf), "{\"queued\":true,\"reqId\":%u}", (unsigned)j.reqId);
+  request->send(202, "application/json", "{\"queued\":true}");
+});
 
-    DlnaIndex idx;
-    bool hasItems = false, hasContainers = false;
+/* ================= DLNA STATUS ================= */
+webserver.on("/dlna/status", HTTP_GET, [](AsyncWebServerRequest *request){
+  // Egyszerű JSON (ha ArduinoJson nincs, kézzel is jó)
+  char buf[256];
+  snprintf(buf, sizeof(buf),
+    "{\"busy\":%s,\"ok\":%s,\"err\":%d,\"reqId\":%u,\"playlistVer\":%u,\"msg\":\"%s\"}",
+    g_dlnaStatus.busy ? "true":"false",
+    g_dlnaStatus.ok ? "true":"false",
+    g_dlnaStatus.err,
+    (unsigned)g_dlnaStatus.reqId,
+    (unsigned)g_dlnaStatus.playlistVer,
+    g_dlnaStatus.msg
+  );
 
-    if (!idx.browseAndDecide(g_dlnaControlUrl, objectId, hasItems, hasContainers)) {
-      request->send(500, "text/plain", "Browse failed");
-      break;
-    }
-
-    if (!hasItems && !hasContainers) {
-      request->send(204, "text/plain", "Empty");
-      break;
-    }
-
-    uint8_t depth = hasItems ? 2 : 6;
-
-    if (!idx.autoBuildPlaylist(g_dlnaControlUrl, objectId, depth, 3000)) {
-      request->send(500, "text/plain", "DLNA playlist build failed");
-      break;
-    }
-
-    if (SPIFFS.exists(PLAYLIST_DLNA_PATH))
-      SPIFFS.remove(PLAYLIST_DLNA_PATH);
-
-    if (!SPIFFS.rename(TMP_PATH, PLAYLIST_DLNA_PATH)) {
-      request->send(500, "text/plain", "Rename failed");
-      break;
-    }
-
-    // Mark DLNA as active playlist source
-    config.saveValue(&config.store.playlistSource, (uint8_t)PL_SRC_DLNA, true, true);
-
-    // Reset DLNA index (start from first track)
-    config.saveValue(&config.store.lastDlnaStation, (uint16_t)0, true, true);
-
-    Serial.println("[DLNA] Playlist built, DLNA source activated");
-
-    request->send(200, "text/plain", "OK");
-    ok = true;
-
-  } while (false);
-
-  g_dlnaBuilding = false;
-  dlnaUnlock();
+  // Cache OFF a statusra
+  AsyncWebServerResponse *r = request->beginResponse(200, "application/json", buf);
+  r->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  r->addHeader("Pragma", "no-cache");
+  request->send(r);
 });
 
 webserver.on("/playlist/dlna", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -352,6 +318,7 @@ webserver.on("/get", HTTP_GET, [](AsyncWebServerRequest *request){
     json += "\"ttsenabled\":"  + String(config.store.ttsEnabled ? 1 : 0) + ",";
     json += "\"ttsduringplayback\":" + String(config.store.ttsDuringPlayback ? 1 : 0) + ",";
     json += "\"clockfontmono\":" + String(config.store.clockFontMono ? 1 : 0) + ",";
+    json += "\"metaStNameSkip\":"  + String(config.store.metaStNameSkip ? 1 : 0) + ",";
     json += "\"ttsinterval\":" + String((int)config.store.ttsInterval) + ",";
     json += "\"grndHeight\":" + String(config.store.grndHeight) + ",";
     json += "\"pressureSlope_x1000\":" + String(config.store.pressureSlope_x1000) + ",";
@@ -407,6 +374,9 @@ webserver.on("/setClockFont", HTTP_GET, [](AsyncWebServerRequest *request){
   //  MDNS.begin(config.store.mdnsname);
   websocket.onEvent(onWsEvent);
   webserver.addHandler(&websocket);
+#ifdef USE_DLNA //DLNA mod
+  dlna_worker_start();
+#endif
   if(!quiet) Serial.println("done");
   return true;
 }

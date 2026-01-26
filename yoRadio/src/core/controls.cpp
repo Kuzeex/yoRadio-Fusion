@@ -1,4 +1,17 @@
 //v0.9.670 // Módosítva. "vol_step" by Tamás Várai
+#if IR_PIN!=255 //new IRRemote Library mod
+#include "../IRremoteESP8266/IRrecv.h"
+#include "../IRremoteESP8266/IRremoteESP8266.h"
+#include "../IRremoteESP8266/IRac.h"
+#include "../IRremoteESP8266/IRtext.h"
+#include "../IRremoteESP8266/IRutils.h"
+
+#ifdef atomic_uint16_t
+#undef atomic_uint16_t
+#endif
+
+#endif
+
 #include "Arduino.h"
 #include "options.h"
 #include "controls.h"
@@ -57,11 +70,6 @@ constexpr uint8_t nrOfButtons = sizeof(button) / sizeof(button[0]);
 #if IR_PIN!=255
 #include <assert.h>
 
-#include "../IRremoteESP8266/IRrecv.h"
-#include "../IRremoteESP8266/IRremoteESP8266.h"
-#include "../IRremoteESP8266/IRac.h"
-#include "../IRremoteESP8266/IRtext.h"
-#include "../IRremoteESP8266/IRutils.h"
 uint8_t irVolRepeat = 0;
 //const uint16_t kCaptureBufferSize = 1024;
 const uint16_t kMinUnknownSize = 12;

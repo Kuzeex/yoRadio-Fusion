@@ -107,6 +107,12 @@ void clock_tts_task_func(void *param) {
       continue;
     }
 
+    // === TTS only in WEB mode ===
+    if (config.getMode() != PM_WEB) {
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      continue;
+    }
+
     time_t now = time(nullptr);
     struct tm *tm_info = localtime(&now);
 

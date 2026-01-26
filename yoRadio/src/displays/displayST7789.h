@@ -3,7 +3,7 @@
 
 #include "Arduino.h"
 #include <Adafruit_GFX.h>
-#include <Adafruit_ST7789.h>
+#include "../Adafruit_ST7735_and_ST7789_Library/Adafruit_ST7789.h"
 
 #if DSP_MODEL==DSP_ST7789_76
   #include "fonts/bootlogo62x40.h"

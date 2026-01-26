@@ -15,6 +15,7 @@ extern decltype(nextion) nextion;  // helyettesd
 String currentArtist = "";
 String currentTitle = "";
 uint16_t currentStationId = -1;
+bool meta_Station_Name = false;
 // Prototípusok (a header elérhetővé teszi a függvényeket más fájlok számára)
 void my_audio_info(Audio::msg_t m);
 //void audio_info(const char *info);
@@ -121,12 +122,13 @@ void my_audio_info(Audio::msg_t m) {
   // Az állomás nevének kiolvasása. ✅
   if (strcmp(m.s, "station_name") == 0 || strcmp(m.s, "icy-name") == 0) {
       if (printable(m.msg)) {
-  #ifndef MetaStationNameSkip
+        meta_Station_Name  = (config.store.metaStNameSkip != 0);    
+       if (!meta_Station_Name) {
         // csak akkor engedjük, ha nincs tiltva meta station név
         config.setStation(m.msg);
         display.putRequest(NEWSTATION);
         netserver.requestOnChange(STATION, 0);
-  #endif
+       }
       }
   }
   // Streamtitle kiolvasása. ✅
@@ -170,6 +172,10 @@ void my_audio_info(Audio::msg_t m) {
     if (config.store.audioinfo) {
       audio_icy_description(m.msg);
     }
+  }
+  if (strcmp(m.s, "eof") == 0) {
+      audio_eof();
+      config.vuThreshold =0;
   }
 }
 
@@ -369,24 +375,40 @@ void audio_id3data(const char *info) {
 }
 
 void audio_eof() {
+  Serial.println("=== AUDIO EOF ===");
+
+  Serial.printf("mode=%d (PM_WEB=0, PM_SDCARD=1)\n", config.getMode());
+
+#ifdef USE_DLNA //DLNA mod
+  Serial.printf("playlistSource=%d (WEB=0, DLNA=1)\n", config.store.playlistSource);
+#endif
+
+  Serial.printf("player.isRunning()=%d\n", player.isRunning());
+
   config.sdResumePos = 0;
 
   if (config.getMode() == PM_SDCARD) {
+    Serial.println("EOF: SD -> player.next()");
     player.next();
     return;
   }
 
 #ifdef USE_DLNA //DLNA mod
   if (config.store.playlistSource == PL_SRC_DLNA) {
+    Serial.println("EOF: DLNA -> player.next()");
     player.next();
     return;
   }
 #endif
+
+  Serial.println("EOF: no matching mode -> STOP");
 }
+
 
 void audio_progress(uint32_t startpos, uint32_t endpos) {
   player.sd_min = startpos;
   player.sd_max = endpos;
+
   netserver.requestOnChange(SDLEN, 0);
 }
 

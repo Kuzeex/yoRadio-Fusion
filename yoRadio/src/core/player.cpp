@@ -237,18 +237,18 @@ void Player::loop() {
   checkAutoStartStop();   /* ----- Auto On-Off Timer ----- */
   Audio::loop();
 
-  if (!isRunning() && _status == PLAYING) { //DLNA mod
-    _stop(true);
-
-    if (config.getMode() == PM_SDCARD) {
-      if (player.getAudioFilePosition() == 0) next();   // Csak akkor next(), ha a fájl ténylegesen lejárt
-    }
-  #ifdef USE_DLNA
-    else if (config.store.playlistSource == PL_SRC_DLNA) {
-      next();
-    }
-  #endif
-  }
+#ifdef USE_SD
+if (
+  config.getMode() == PM_SDCARD &&
+  !isRunning() &&
+  _status == PLAYING &&
+  player.getAudioFilePosition() == 0
+) {
+  Serial.println("[SD] EOF -> next()");
+  next();
+  return;
+}
+#endif
 
   if(_volTimer){
     if((millis()-_volTicks)>3000){

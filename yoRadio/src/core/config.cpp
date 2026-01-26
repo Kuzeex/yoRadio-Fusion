@@ -25,10 +25,6 @@
 
 Config config;
 
-#ifdef USE_DLNA //DLNA mod
-volatile bool g_dlnaBuilding = false;
-#endif
-
 void u8fix(char *src){
   char last = src[strlen(src)-1]; 
   if ((uint8_t)last >= 0xC2) src[strlen(src)-1]='\0';
@@ -319,9 +315,8 @@ void Config::setSDpos(uint32_t val){
   }
 }
 
-void Config::initPlaylistMode(){ //DLNA mod
+void Config::initPlaylistMode() { //DLNA mod
   uint16_t _lastStation = 0;
-  uint16_t cs = playlistLength();
 
 #ifdef USE_SD
   if (getMode() == PM_SDCARD) {
@@ -334,24 +329,50 @@ void Config::initPlaylistMode(){ //DLNA mod
     Serial.println("SD Mounted");
     initSDPlaylist();
 
+    uint16_t cs = playlistLength();
     _lastStation = store.lastSdStation;
-    if (_lastStation == 0 && cs > 0) _lastStation = _randomStation();
+    if (_lastStation == 0 && cs > 0) {
+      _lastStation = _randomStation();
+    }
   }
   else
 #endif
   {
+
 #ifdef USE_DLNA
-    if (store.playlistSource == PL_SRC_DLNA) {
+    // ===== DLNA =====
+    if (store.playlistSource == PL_SRC_DLNA &&
+        SPIFFS.exists(PLAYLIST_DLNA_PATH)) {
+
       Serial.println("[MODE] Init DLNA playlist");
       initDLNAPlaylist();
+
+      uint16_t cs = playlistLength();
       _lastStation = store.lastDlnaStation;
-      if (_lastStation == 0 && cs > 0) _lastStation = 1;
-    } else
+      if (_lastStation == 0 && cs > 0) {
+        _lastStation = 1;
+      }
+    }
+    else
 #endif
     {
-      if (!emptyFS) initPlaylist();
+      // ===== WEB =====
+      Serial.println("[MODE] Init WEB playlist");
+
+#ifdef USE_DLNA
+      store.playlistSource = PL_SRC_WEB;
+      saveValue(&store.playlistSource, (uint8_t)PL_SRC_WEB, true, true);
+#endif
+
+      if (!emptyFS) {
+        initPlaylist();
+      }
+
+      uint16_t cs = playlistLength();
       _lastStation = store.lastStation;
-      if (_lastStation == 0 && cs > 0) _lastStation = 1;
+      if (_lastStation == 0 && cs > 0) {
+        _lastStation = 1;
+      }
     }
   }
 
@@ -361,8 +382,6 @@ void Config::initPlaylistMode(){ //DLNA mod
   _bootDone = true;
   loadStation(_lastStation);
 }
-
-
 
 void Config::_initHW(){
   loadTheme();
@@ -747,6 +766,7 @@ void Config::setDefaults() {
   store.showNameday = 0;
   store.clockFontId = 0;
   store.ttsEnabled  = 0;
+  store.metaStNameSkip = 0;
   store.ttsInterval = 60;
   store.ttsDuringPlayback = false;
   store.clockFontMono = true;
@@ -996,7 +1016,7 @@ void Config::initDLNAPlaylist() {
   if (SPIFFS.exists(INDEX_DLNA_PATH)) {
     File index = SPIFFS.open(INDEX_DLNA_PATH, "r");
     if (index) {
-      lastStation(_randomStation());
+      //lastStation(_randomStation());
       index.close();
     }
   }

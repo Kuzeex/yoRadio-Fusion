@@ -229,7 +229,7 @@
 
 // --------------------------------------------------------------------------------------480x272
 #elif DSP_MODEL==DSP_NV3041A
-  #define VU_DEF_HGT_DEF  40
+  #define VU_DEF_HGT_DEF  37
   #define VU_DEF_BARS_DEF 8
   #define VU_DEF_GAP_DEF  2
   #define VU_DEF_FADE_DEF 3
@@ -274,7 +274,7 @@
   #define VU_DEF_EXPO_STR  140  // 0.25
   #define VU_DEF_EXPO_BBX  140  // 0.25
   #define VU_DEF_EXPO_STD  130  // 0.10
-  #define VU_DEF_FLOOR_DEF  35  // 0.40
+  #define VU_DEF_FLOOR_DEF  80  // 0.40
   #define VU_DEF_FLOOR_STR  82  // 0.25
   #define VU_DEF_FLOOR_BBX  82  // 0.25
   #define VU_DEF_FLOOR_STD  20  // 0.10
@@ -282,7 +282,7 @@
   #define VU_DEF_CEIL_STR  100  // 0.25
   #define VU_DEF_CEIL_BBX  100  // 0.25
   #define VU_DEF_CEIL_STD  100  // 0.10
-  #define VU_DEF_GAIN_DEF  120  // 0.40
+  #define VU_DEF_GAIN_DEF  100  // 0.40
   #define VU_DEF_GAIN_STR  195  // 0.25
   #define VU_DEF_GAIN_BBX  195  // 0.25
   #define VU_DEF_GAIN_STD  90  // 0.10
