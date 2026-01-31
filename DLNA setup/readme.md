@@ -1,9 +1,11 @@
 This build adds **DLNA playlist browsing and playback** support to yoRadio,
+
 tested primarily with **Synology NAS**.
 
 ## 1. Build Configuration (`myoptions.h`)
 
 Enable DLNA support and configure your DLNA server:
+
 #define USE_DLNA
 #define dlnaHost "192.168.180.122"   // DLNA server IP address
 #define dlnaIDX  21                 // Root MUSIC container ID (Synology default is usually 21)
