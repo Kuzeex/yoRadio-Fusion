@@ -3,6 +3,7 @@
 #ifdef USE_DLNA
 
 #include "dlna_index.h"
+#include "dlna_http_guard.h"
 #include <WiFiClient.h>
 #include <HTTPClient.h>
 #include <SPIFFS.h>
@@ -27,34 +28,63 @@ static String jsonEscape(String s) {
 // ================================================================
 // SOAP Browse - ONE PAGE
 // ================================================================
+extern SemaphoreHandle_t g_dlnaHttpMux;
+
 bool DlnaIndex::browsePage(const String& controlUrl,
                            const String& objectId,
                            uint32_t start,
                            uint32_t count,
                            String& outDIDL,
                            uint32_t& returned,
-                           uint32_t& total) {
+                           uint32_t& total)
+{
   returned = total = 0;
-  outDIDL = "";
+  outDIDL  = "";
 
-  HTTPClient http;
-  WiFiClient client;
+  Serial.printf("[DLNA][BROWSE] mux=%p\n", (void*)g_dlnaHttpMux);
 
-  String soap = buildBrowseEnvelope(objectId, start, count);
+if (!controlUrl.length()) {
+  Serial.println("[DLNA][BROWSE] controlUrl not ready");
+  return false;
+}
 
-  http.begin(client, controlUrl);
-  http.addHeader("Content-Type", "text/xml; charset=\"utf-8\"");
-  http.addHeader("SOAPACTION", "\"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\"");
+  bool ok = false;
+  String xml;   // <-- KINT, hogy a lock után is elérd
 
-  int code = http.POST((uint8_t*)soap.c_str(), soap.length());
-  if (code != HTTP_CODE_OK) {
+  // ====== HTTP szakasz: CSAK EZ lockolt ======
+  {
+    DlnaHttpGuard lock;
+
+    HTTPClient http;
+    WiFiClient client;
+
+    String soap = buildBrowseEnvelope(objectId, start, count);
+
+    if (!http.begin(client, controlUrl)) {
+      Serial.println("[DLNA][BROWSE] http.begin failed");
+      return false;
+    }
+
+    http.addHeader("Content-Type", "text/xml; charset=\"utf-8\"");
+    http.addHeader("SOAPACTION", "\"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\"");
+
+    int code = http.POST((uint8_t*)soap.c_str(), soap.length());
+    if (code != HTTP_CODE_OK) {
+      Serial.printf("[DLNA][BROWSE] HTTP error: %d\n", code);
+      http.end();
+      return false;
+    }
+
+    xml = http.getString();
     http.end();
-    Serial.printf("[DLNA][BROWSE] HTTP error: %d\n", code);
+  }
+  // ====== innentől PARSE: lock nélkül ======
+
+  // (opcionális) kis sanity
+  if (!xml.length()) {
+    Serial.println("[DLNA][BROWSE] empty XML");
     return false;
   }
-
-  String xml = http.getString();
-  http.end();
 
   int nr1 = xml.indexOf("<NumberReturned>");
   int nr2 = xml.indexOf("</NumberReturned>");
@@ -80,7 +110,6 @@ bool DlnaIndex::browsePage(const String& controlUrl,
     if (cend >= 0) didl.remove(cend);
   }
 
-  // basic XML entity decode
   didl.replace("&lt;", "<");
   didl.replace("&gt;", ">");
   didl.replace("&quot;", "\"");
@@ -88,7 +117,9 @@ bool DlnaIndex::browsePage(const String& controlUrl,
   didl.replace("&amp;", "&");
 
   outDIDL = didl;
-  return true;
+  ok = true;
+
+  return ok;
 }
 
 String DlnaIndex::buildBrowseEnvelope(const String& objectId, uint32_t start, uint32_t count) {
@@ -392,7 +423,7 @@ bool DlnaIndex::autoBuildPlaylist(const String& controlUrl,
 // buildContainerIndex: optional helper for root category cache
 // ================================================================
 bool DlnaIndex::buildContainerIndex(const String& controlUrl, const String& rootObjectId) {
-  // SPIFFS test
+
   File ftest = SPIFFS.open(TMP_PATH, "w");
   if (!ftest) {
     Serial.println("[DLNA][PL] SPIFFS open failed");
@@ -400,29 +431,60 @@ bool DlnaIndex::buildContainerIndex(const String& controlUrl, const String& root
   }
   ftest.close();
 
+  if (!controlUrl.length()) {
+    Serial.println("[DLNA][IDX] ERROR: empty controlUrl");
+    return false;
+  }
+
+  uint32_t lastYield = millis();
+
   String didl;
   uint32_t ret = 0, tot = 0;
-  if (!browsePage(controlUrl, rootObjectId, 0, 200, didl, ret, tot)) return false;
+
+  if (!browsePage(controlUrl, rootObjectId, 0, 200, didl, ret, tot))
+    return false;
+
+  // 🔑 yield browse után
+  if (millis() - lastYield > 50) {
+    vTaskDelay(1);
+    lastYield = millis();
+  }
 
   std::vector<String> cids, ctitles;
   extractContainersFromDIDL(didl, cids, ctitles);
+
+  // 🔑 yield parse után
+  if (millis() - lastYield > 50) {
+    vTaskDelay(1);
+    lastYield = millis();
+  }
 
   File f = SPIFFS.open(DLNA_LIST_JSON_PATH, "w");
   if (!f) return false;
 
   f.print("{\"ok\":true,\"items\":[");
+
   for (size_t i = 0; i < cids.size(); i++) {
     if (i) f.print(",");
+
     String t = (i < ctitles.size()) ? ctitles[i] : "";
     t.replace("\"", "'");
-    f.printf("{\"type\":\"container\",\"id\":\"%s\",\"title\":\"%s\"}", cids[i].c_str(), t.c_str());
+    f.printf("{\"type\":\"container\",\"id\":\"%s\",\"title\":\"%s\"}",
+             cids[i].c_str(), t.c_str());
+
+    // 🔑 loop közbeni yield
+    if ((i & 0x0F) == 0) {   // 16-onként
+      vTaskDelay(1);
+    }
   }
+
   f.print("]}");
   f.close();
 
   Serial.printf("[DLNA][IDX] %u containers written\n", (unsigned)cids.size());
   return true;
 }
+
 
 // ================================================================
 // beautifyTitle  => "Album - [CD# -] TrackTitle"   (NO artist)

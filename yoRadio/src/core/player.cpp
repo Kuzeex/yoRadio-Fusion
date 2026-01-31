@@ -190,11 +190,29 @@ void Player::loop() {
     switch (requestP.type){
       case PR_STOP: _stop(); break;
       case PR_PLAY: {
-        if (requestP.payload>0) {
-          config.setLastStation((uint16_t)requestP.payload);
+        uint16_t st = (uint16_t)abs(requestP.payload);
+
+#ifdef USE_DLNA
+        if (config.store.playlistSource == PL_SRC_DLNA) {
+          config.store.lastDlnaStation = st;
+          config.saveValue(&config.store.lastDlnaStation, (uint16_t)st);
+          config.sdResumePos = 0;
+          config.saveValue(&config.store.lastPlayedSource, (uint8_t)PL_SRC_DLNA);
+          _play(st);
+          netserver.requestOnChange(GETINDEX, 0);
+          break;
         }
-        _play((uint16_t)abs(requestP.payload)); 
-        if (player_on_station_change) player_on_station_change(); 
+#endif
+
+        // ==== EREDETI VISSELKEDÉS (WEB / SD) ====
+        if (requestP.payload > 0) {
+          config.setLastStation(st);
+        }
+#ifdef USE_DLNA
+        config.saveValue(&config.store.lastPlayedSource, (uint8_t)PL_SRC_WEB);
+#endif
+        _play(st);
+        if (player_on_station_change) player_on_station_change();
         pm.on_station_change();
         break;
       }

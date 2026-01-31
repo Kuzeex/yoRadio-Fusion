@@ -216,6 +216,7 @@ struct config_t
 #ifdef USE_DLNA   // DLNA mod
   uint8_t playlistSource; 
   void indexDLNAPlaylist();
+  uint8_t lastPlayedSource;
 #endif
 };
 
@@ -324,17 +325,35 @@ class Config {
 #ifdef USE_DLNA //DLNA mod
     void indexDLNAPlaylist();
     void initDLNAPlaylist();
-    bool resumeAfterModeChange = false;
+    bool resumeAfterModeChange;
+    bool isBooting;
 #endif
     void initSDPlaylist();
     void changeMode(int newmode=-1);
     uint16_t playlistLength();
     uint16_t lastStation(){
-      return getMode()==PM_WEB?store.lastStation:store.lastSdStation;
+#ifdef USE_SD
+      if (getMode() == PM_SDCARD) return store.lastSdStation;
+#endif
+#ifdef USE_DLNA
+      if (store.playlistSource == PL_SRC_DLNA) return store.lastDlnaStation;
+#endif
+      return store.lastStation;
     }
     void lastStation(uint16_t newstation){
-      if(getMode()==PM_WEB) saveValue(&store.lastStation, newstation);
-      else saveValue(&store.lastSdStation, newstation);
+#ifdef USE_SD
+      if (getMode() == PM_SDCARD) {
+        saveValue(&store.lastSdStation, newstation);
+        return;
+      }
+#endif
+#ifdef USE_DLNA
+      if (store.playlistSource == PL_SRC_DLNA) {
+        saveValue(&store.lastDlnaStation, newstation);
+        return;
+      }
+#endif
+      saveValue(&store.lastStation, newstation);
     }
     char * stationByNum(uint16_t num);
     void setTimezone(int8_t tzh, int8_t tzm);

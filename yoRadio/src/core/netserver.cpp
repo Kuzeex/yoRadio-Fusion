@@ -97,6 +97,18 @@ extern String g_dlnaControlUrl;
 /* ================= DLNA INIT ================= */
 webserver.on("/dlna/init", HTTP_GET, [](AsyncWebServerRequest* request) {
 
+//DLNA modplus
+
+   if (dlna_isBusy()) {
+     request->send(429, "application/json", "{\"queued\":false,\"busy\":true}");
+     return;
+   }
+
+   config.resumeAfterModeChange = player.isRunning();
+   if (config.resumeAfterModeChange) {
+     player.sendCommand({PR_STOP, 0});
+   }
+//DLNA modplus
   DlnaJob j{};
   j.type  = DJ_INIT;
   j.reqId = dlna_next_reqId();
@@ -198,7 +210,20 @@ webserver.on("/dlna/append", HTTP_GET, [](AsyncWebServerRequest *request){
 
 /* ================= DLNA STATUS ================= */
 webserver.on("/dlna/status", HTTP_GET, [](AsyncWebServerRequest *request){
-  // Egyszerű JSON (ha ArduinoJson nincs, kézzel is jó)
+//DLNA modplus
+  // Build után egyszer reseteljük a DLNA indexet 1-re, hogy a lista első eleme legyen aktív.
+  static uint32_t s_appliedBuildVer = 0;
+  if (!g_dlnaStatus.busy &&
+      g_dlnaStatus.ok &&
+      g_dlnaStatus.playlistVer != 0 &&
+      g_dlnaStatus.playlistVer != s_appliedBuildVer &&
+      strstr(g_dlnaStatus.msg, "build ok") != nullptr) {
+
+    s_appliedBuildVer = g_dlnaStatus.playlistVer;
+
+    Serial.println("[DLNA] Build completed → reset index to 1");
+  }
+
   char buf[256];
   snprintf(buf, sizeof(buf),
     "{\"busy\":%s,\"ok\":%s,\"err\":%d,\"reqId\":%u,\"playlistVer\":%u,\"msg\":\"%s\"}",
@@ -218,15 +243,33 @@ webserver.on("/dlna/status", HTTP_GET, [](AsyncWebServerRequest *request){
 });
 
 webserver.on("/playlist/dlna", HTTP_GET, [](AsyncWebServerRequest *request) {
-  config.resumeAfterModeChange = player.isRunning();
-  Serial.printf("[MODE] DLNA enter, resume=%d\n", config.resumeAfterModeChange);
+  bool resume = config.resumeAfterModeChange;
 
   config.store.playlistSource = PL_SRC_DLNA;
   config.saveValue(&config.store.playlistSource, (uint8_t)PL_SRC_DLNA);
 
-  config.newConfigMode = PM_WEB;
-  netserver.requestOnChange(CHANGEMODE, 0);
+#ifdef USE_SD
+  if (config.getMode() == PM_SDCARD) {
+    config.changeMode(PM_WEB);
+  }
+#endif
+
+  if (config.getMode() != PM_WEB) {
+     config.changeMode(PM_WEB);
+  } else {
+    config.loadStation(config.store.lastDlnaStation);
+
+    if (player_on_station_change) player_on_station_change();
+    netserver.requestOnChange(GETINDEX, 0);
+  }
   
+    if (resume) {
+      Serial.println("[DLNA] Resume playback with DLNA playlist");
+      player.sendCommand({PR_PLAY, (int)config.store.lastDlnaStation});
+    }
+
+  config.resumeAfterModeChange = false;
+
   netserver.requestOnChange(GETINDEX, 0);
   netserver.requestOnChange(GETPLAYERMODE, 0);
 
@@ -234,13 +277,28 @@ webserver.on("/playlist/dlna", HTTP_GET, [](AsyncWebServerRequest *request) {
 });
 
 webserver.on("/playlist/web", HTTP_GET, [](AsyncWebServerRequest *request) {
+ bool resume = config.resumeAfterModeChange;
   config.resumeAfterModeChange = player.isRunning();
   Serial.printf("[MODE] WEB enter, resume=%d\n", config.resumeAfterModeChange);
 
   config.store.playlistSource = PL_SRC_WEB;
   config.saveValue(&config.store.playlistSource, (uint8_t)PL_SRC_WEB);
 
-  config.changeMode(PM_WEB);
+  if (config.getMode() != PM_WEB) {
+    config.changeMode(PM_WEB);
+  } else {
+    // nincs mode reset → csak visszatöltjük az indexet
+    config.loadStation(config.lastStation());
+
+    if (player_on_station_change) player_on_station_change();
+    netserver.requestOnChange(GETINDEX, 0);
+  }
+
+  if (resume) {
+    Serial.println("[DLNA] Resume playback after browser exit");
+    player.sendCommand({PR_PLAY, config.lastStation()});
+  }
+  config.resumeAfterModeChange = false;
 
   netserver.requestOnChange(GETINDEX, 0);
   netserver.requestOnChange(GETPLAYERMODE, 0);
@@ -623,14 +681,20 @@ void NetServer::processQueue(){
       case CHANGEMODE:
         config.changeMode(config.newConfigMode);
 
-      #ifdef USE_DLNA
-        if (config.resumeAfterModeChange) {
-          Serial.println("[MODE] Resume playback after mode change");
-          player.sendCommand({PR_PLAY, -1});
-          config.resumeAfterModeChange = false;
-        }
-      #endif
+      #ifdef USE_DLNA //DLNA modplus
+      if (config.resumeAfterModeChange) {
+        uint16_t st =
+          (config.getMode() == PM_SDCARD)
+            ? config.store.lastSdStation
+            : (config.store.playlistSource == PL_SRC_DLNA
+                ? config.store.lastDlnaStation
+                : config.store.lastStation);
 
+        Serial.printf("[MODE] Resume playback → station %u\n", st);
+        player.sendCommand({PR_PLAY, st});
+        config.resumeAfterModeChange = false;
+      }
+      #endif //DLNA modplus
   return;
   break;
 #endif

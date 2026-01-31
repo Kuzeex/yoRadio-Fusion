@@ -13,8 +13,12 @@ String g_dlnaControlUrl;
 
 static bool s_serviceStarted = false;
 static uint32_t s_reqId = 1;
+bool g_dlnaReady = false;
 
 bool dlnaInit(const String& rootObjectId, String& err) {
+
+  g_dlnaReady = false;
+  g_dlnaControlUrl = "";
 
   player.sendCommand({PR_STOP, 0});
 
@@ -25,9 +29,16 @@ bool dlnaInit(const String& rootObjectId, String& err) {
   String descUrl;
   String controlUrl;
 
+  uint32_t lastYield = millis();
+
   if (!ssdp.resolve(dlnaHost, descUrl)) {
     err = "SSDP discover failed";
     return false;
+  }
+
+  if (millis() - lastYield > 50) {
+    vTaskDelay(1);
+    lastYield = millis();
   }
 
   bool cdOk = false;
@@ -36,20 +47,28 @@ bool dlnaInit(const String& rootObjectId, String& err) {
       cdOk = true;
       break;
     }
-    delay(500);
+
+    vTaskDelay(pdMS_TO_TICKS(500));   // ✔ delay helyett
   }
 
-  if (!cdOk) {
+  if (!cdOk || !controlUrl.length()) {
     err = "ContentDirectory not found";
+    Serial.println("[DLNA] ERROR: ContentDirectory control URL not resolved");
     return false;
   }
 
-  g_dlnaControlUrl = controlUrl;
+  Serial.printf("[DLNA] ContentDirectory control URL: %s\n", controlUrl.c_str());
 
   if (!idx.buildContainerIndex(controlUrl, rootObjectId)) {
     err = "Root container browse failed";
     return false;
   }
+
+  // biztos yield a végén is
+  vTaskDelay(1);
+
+  g_dlnaControlUrl = controlUrl;
+  g_dlnaReady = true;
 
   return true;
 }

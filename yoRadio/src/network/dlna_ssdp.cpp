@@ -9,6 +9,7 @@ static const uint16_t SSDP_PORT = 1900;
 bool DlnaSSDP::resolve(const char* expectedHost, String& outDescUrl) {
   outDescUrl = "";
 
+ 
 _udp.stop();
 
   // sima UDP socket (nem multicast API!)
@@ -57,10 +58,19 @@ bool DlnaSSDP::receiveResponse(const char* expectedHost, String& outDescUrl) {
   int size = _udp.parsePacket();
   if (!size) return false;
 
-  String response;
+/*  String response;
   while (_udp.available()) {
     response += (char)_udp.read();
+  }*/
+
+  // FIX: String összefűzés helyett fix buffer (heap-fragmentáció ellen)
+  static char buf[1600];
+  int n = 0;
+  while (_udp.available() && n < (int)sizeof(buf) - 1) {
+    buf[n++] = (char)_udp.read();
   }
+  buf[n] = 0;
+  String response(buf);
 
   if (!response.startsWith("HTTP/1.1 200")) return false;
 
@@ -80,8 +90,14 @@ bool DlnaSSDP::receiveResponse(const char* expectedHost, String& outDescUrl) {
 }
 
 bool DlnaSSDP::parseLocation(const String& response, String& outUrl) {
+/*  int idx = response.indexOf("\nLOCATION:");
+  if (idx < 0) idx = response.indexOf("\nLocation:");*/
+
+  // case-insensitive keresés durván, de stabilan
   int idx = response.indexOf("\nLOCATION:");
   if (idx < 0) idx = response.indexOf("\nLocation:");
+  if (idx < 0) idx = response.indexOf("\nlocation:");
+
   if (idx < 0) return false;
 
   int start = response.indexOf(":", idx) + 1;

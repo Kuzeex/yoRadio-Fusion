@@ -54,6 +54,12 @@ bool Config::_isFSempty() {
 void Config::init() {
   EEPROM.begin(EEPROM_SIZE);
   sdResumePos = 0;
+//DLNA modplus
+#ifdef USE_DLNA 
+  isBooting = true; 
+  resumeAfterModeChange = false; 
+#endif 
+//DLNA modplus
   screensaverTicks = 0;
   screensaverPlayingTicks = 0;
   newConfigMode = 0;
@@ -82,10 +88,9 @@ void Config::init() {
   #endif
 #endif
   eepromRead(EEPROM_START, store);
-#ifdef USE_DLNA //DLNA mod
-  if (store.playlistSource > PL_SRC_DLNA) {
-    saveValue(&store.playlistSource, (uint8_t)PL_SRC_WEB, true, true);
-  }
+#ifdef USE_DLNA
+  if (store.lastPlayedSource == PL_SRC_DLNA) store.playlistSource = PL_SRC_DLNA;
+  else store.playlistSource = PL_SRC_WEB;
 #endif
   bootInfo(); // https://github.com/e2002/yoradio/pull/149
   if (store.config_set != 4262) {
@@ -99,7 +104,12 @@ void Config::init() {
   BOOTLOG("CONFIG_VERSION\t%d", store.version);
 
   store.play_mode = store.play_mode & 0b11;
+//DLNA modplus
+#ifdef USE_DLNA 
+#else
   if(store.play_mode>1) store.play_mode=PM_WEB;
+#endif
+//DLNA modplus
   _initHW();
   if (!SPIFFS.begin(true)) {
     Serial.println("##[ERROR]#\tSPIFFS Mount Failed");
@@ -117,6 +127,11 @@ void Config::init() {
   #endif
   _bootDone=false;
   setTimeConf();
+//DLNA modplus
+#ifdef USE_DLNA 
+  isBooting = false;
+#endif
+//DLNA modplus
 }
 
 void Config::_setupVersion(){
@@ -315,72 +330,51 @@ void Config::setSDpos(uint32_t val){
   }
 }
 
-void Config::initPlaylistMode() { //DLNA mod
+void Config::initPlaylistMode() {
   uint16_t _lastStation = 0;
 
 #ifdef USE_SD
   if (getMode() == PM_SDCARD) {
     if (!sdman.start()) {
-      Serial.println("SD Mount Failed");
       changeMode(PM_WEB);
       return;
     }
-
-    Serial.println("SD Mounted");
     initSDPlaylist();
-
     uint16_t cs = playlistLength();
     _lastStation = store.lastSdStation;
-    if (_lastStation == 0 && cs > 0) {
-      _lastStation = _randomStation();
-    }
-  }
-  else
+    if (_lastStation == 0 && cs > 0) _lastStation = _randomStation();
+  } else
 #endif
   {
 
 #ifdef USE_DLNA
-    // ===== DLNA =====
-    if (store.playlistSource == PL_SRC_DLNA &&
-        SPIFFS.exists(PLAYLIST_DLNA_PATH)) {
+    if (store.playlistSource == PL_SRC_DLNA) {
 
-      Serial.println("[MODE] Init DLNA playlist");
-      initDLNAPlaylist();
+      if (SPIFFS.exists(PLAYLIST_DLNA_PATH)) {
+        initDLNAPlaylist();
+      }
 
       uint16_t cs = playlistLength();
+
+      // ⬇️ DLNA indexet CSAK innen vesszük
       _lastStation = store.lastDlnaStation;
-      if (_lastStation == 0 && cs > 0) {
-        _lastStation = 1;
-      }
-    }
-    else
+      if (_lastStation == 0 && cs > 0) _lastStation = 1;
+
+    } else
 #endif
     {
-      // ===== WEB =====
-      Serial.println("[MODE] Init WEB playlist");
-
-#ifdef USE_DLNA
-      store.playlistSource = PL_SRC_WEB;
-      saveValue(&store.playlistSource, (uint8_t)PL_SRC_WEB, true, true);
-#endif
-
-      if (!emptyFS) {
-        initPlaylist();
-      }
-
+      initPlaylist();
       uint16_t cs = playlistLength();
       _lastStation = store.lastStation;
-      if (_lastStation == 0 && cs > 0) {
-        _lastStation = 1;
-      }
+      if (_lastStation == 0 && cs > 0) _lastStation = 1;
     }
   }
 
+  // ⬇️ EGYSZER
   lastStation(_lastStation);
-  saveValue(&store.play_mode, (uint8_t)store.play_mode, true, true);
+  loadStation(_lastStation);
 
   _bootDone = true;
-  loadStation(_lastStation);
 }
 
 void Config::_initHW(){

@@ -6,7 +6,8 @@
 #include "dlna_service.h"
 #include <SPIFFS.h>
 #include "esp_task_wdt.h"
-#include "dlna_index.h" 
+#include "dlna_index.h"
+#include "dlna_http_guard.h" 
 
 QueueHandle_t g_dlnaQueue = nullptr;
 SemaphoreHandle_t g_spiffsMux = nullptr;
@@ -122,12 +123,22 @@ static void dlna_worker_task(void* ) {
       bool hasItems = false, hasContainers = false;
 
       ok = idx.browseAndDecide(g_dlnaControlUrl, j.objectId, hasItems, hasContainers);
+
+      
       if (!ok) {
         dlna_status_setDone(j, false, 500, "browse failed");
         continue;
       }
 
-      uint8_t depth = hasItems ? 2 : 6;
+      if (!hasItems) { 
+       // van konténer, de track nincs közvetlenül -> UI-nak jelezzük szépen
+       dlna_status_setDone(j, false, 422, hasContainers ? "No tracks in this container (only subfolders)" : "Empty container");
+       continue;
+      } 
+
+      uint8_t depth;
+      if (hasItems) depth = 2;
+      else depth = 6;
 
       uint32_t limit = j.hardLimit ? j.hardLimit : 20000;
 
@@ -154,7 +165,13 @@ static void dlna_worker_task(void* ) {
         continue;
       }
 
-      bumpPlaylistVer();
+      config.sdResumePos = 0;
+      config.resumeAfterModeChange = false;
+
+      // 🔑 DLNA build -> reset DLNA index ONLY
+      config.store.lastDlnaStation = 1;
+      config.saveValue(&config.store.lastDlnaStation, (uint16_t)1);
+
       dlna_status_setDone(j, true, 0, "build ok");
     }
 
@@ -175,7 +192,15 @@ static void dlna_worker_task(void* ) {
         continue;
       }
 
-      uint8_t depth = hasItems ? 2 : 6;
+      if (!hasItems) { 
+       // van konténer, de track nincs közvetlenül -> UI-nak jelezzük szépen
+       dlna_status_setDone(j, false, 422, hasContainers ? "No tracks in this container (only subfolders)" : "Empty container");
+       continue;
+      } 
+
+      uint8_t depth;
+      if (hasItems) depth = 2;
+      else depth = 6;
 
       uint32_t limit = j.hardLimit ? j.hardLimit : 20000;
 
@@ -220,21 +245,25 @@ static void dlna_worker_task(void* ) {
       dlna_status_setDone(j, true, 0, "append ok");
     }
 
-    else if (j.type == DJ_INIT) {
-      dlna_status_setBusy(j, "init");
+else if (j.type == DJ_INIT) {
+  dlna_status_setBusy(j, "init");
 
-      String errStr;
-      String rootId = String(dlnaIDX);   // ahogy eddig is volt
+  String errStr;
+  String rootId = String(dlnaIDX);
 
-      bool okInit = dlnaInit(rootId, errStr);
+  vTaskDelay(1);
 
-      dlna_status_setDone(
-       j,
-       okInit, 
-       okInit ? 0 : 503,
-       okInit ? "init ok" : errStr.c_str()
-      );
-    }
+  bool okInit = dlnaInit(rootId, errStr);
+
+  vTaskDelay(1);
+
+  dlna_status_setDone(
+    j,
+    okInit,
+    okInit ? 0 : 503,
+    okInit ? "init ok" : errStr.c_str()
+  );
+}
 
     worker_yield();
   }
@@ -242,6 +271,9 @@ static void dlna_worker_task(void* ) {
 
 void dlna_worker_start() {
   if (s_workerTask) return;                 // már fut
+  if (!g_dlnaHttpMux) {
+	  g_dlnaHttpMux = xSemaphoreCreateMutex();
+	  Serial.println("[DLNA] HTTP mutex created");}
   if (!g_spiffsMux) g_spiffsMux = xSemaphoreCreateMutex();
   if (!g_dlnaQueue) g_dlnaQueue = xQueueCreate(6, sizeof(DlnaJob));
 

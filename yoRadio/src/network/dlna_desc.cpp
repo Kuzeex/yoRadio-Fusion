@@ -2,6 +2,7 @@
 #ifdef USE_DLNA
 
 #include "dlna_desc.h"
+#include "dlna_http_guard.h"
 #include <WiFiClient.h>
 #include <HTTPClient.h>
 
@@ -12,7 +13,9 @@ bool DlnaDescription::resolveControlURL(const String& descUrl, String& outContro
   WiFiClient client;
 
   Serial.printf("[DLNA] GET %s\n", descUrl.c_str());
-
+  
+   DlnaHttpGuard lock;
+  
   if (!http.begin(client, descUrl)) {
     Serial.println("[DLNA] HTTP begin failed");
     return false;
@@ -54,11 +57,14 @@ bool DlnaDescription::parseStream(Stream& s, String& outControlPath) {
       isContentDir = false;
     }
 
-    if (inService && line.indexOf("ContentDirectory:1") >= 0) {
+    // EXAKT serviceType ellenőrzés
+    if (inService &&
+        line.indexOf("<serviceType>urn:schemas-upnp-org:service:ContentDirectory:1</serviceType>") >= 0) {
       isContentDir = true;
     }
 
-    if (inService && isContentDir && line.indexOf("<controlURL>") >= 0) {
+    if (inService && isContentDir &&
+        line.indexOf("<controlURL>") >= 0) {
       int a = line.indexOf("<controlURL>") + 12;
       int b = line.indexOf("</controlURL>");
       if (b > a) {
