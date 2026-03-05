@@ -118,7 +118,7 @@ After restarting VSCode, wait until PlatformIO finishes installing the required 
 
 ### 5. Download & unzip firmware
 
-Click the green **Code** button at the top of the page and select **Download ZIP**.
+Click the green **Code** button at the top of this page and select **Download ZIP**.
 
 Extract the downloaded ZIP file to a folder on your computer.
 
@@ -196,7 +196,8 @@ Please wait until the installation finishes. This process may take **20–25 min
 
 After the installation finishes, close **VSCode**.
 
-The next step is to apply two modifications required for **language support** and **high-bitrate audio streaming**.
+The next step is to apply three modifications required for **language support** , **high-bitrate audio streaming**
+and **configure WiFi**.
 
 ### 1. High Bitrate Audio Fix
 
@@ -209,7 +210,7 @@ In this folder replace the following files:
 liblwip.a  
 libesp_netif.a
 
-with the files located in the repository:
+with the files located in this repository:
 
 yoRadio-main/Audio_IDF_MOD/
 
@@ -239,7 +240,7 @@ For this reason the example folder: **yoradio-esp32s3n16r8-ili9341** may have a 
 depending on the selected hardware configuration. 
 
 If you use **multiple hardware configurations**, multiple folders will appear inside **libdeps**, 
-and the **font modification must be applied in each of them**.
+and the **font modification must be applied in each of them** at first time.
 
 ### 3. Configure WiFi
 
