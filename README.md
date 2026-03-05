@@ -68,7 +68,8 @@ https://github.com/e2002/yoradio
  ---
 
 Follow these steps to set up the development environment for **yoRadio**.
-Simply click on the images to enlarge them.
+
+Note: Simply click on the images to enlarge them.
 
 ### 1. Install Git
 
@@ -125,11 +126,25 @@ After restarting VSCode, wait until PlatformIO finishes installing the required 
 
 ### 5. Download & unzip firmware
 
+Click the green **Code** button at the top of the page and select **Download ZIP**.
 
+Extract the downloaded ZIP file to a folder on your computer.
 
+Create a project folder on your system: (for example: C:\platformio)
 
+From the extracted archive navigate to: yoRadio-main/yoRadio
 
+Copy the **entire contents of this folder** into: C:\platformio
 
+Only the **yoRadio** folder is required. The other folders and files from the ZIP archive are not needed.
+
+In the **yoRadio-main** archive open the folder: **Setup samples**
+
+Select the folder that matches your display type (for example: **ILI9341**).
+
+From the selected folder copy the file: **platformio.ini** into the project folder: **C:\platformio\yoRadio**
+
+Copy your own **myoptions.h** file into the project folder: **C:\platformio\yoRadio**, or use the one in the Setup samples folder, but adapt it to your own hardware! 
 
 
 
