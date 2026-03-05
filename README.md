@@ -333,7 +333,7 @@ on the Settings page, in the Update Firmware menu:
   <img src="https://github.com/user-attachments/assets/0ff3e556-5947-4564-b653-7c2d466fc426" width="400">
 </a>
 
-[⬆ Back to top](#subtop)
+[⬆ Back to start](#subtop)
 
 ---
 
@@ -399,8 +399,11 @@ Online: https://vip-cxema.org/index.php/online-kalkulyatory/yoradio-redaktor-tem
 
 Offline: https://github.com/andrasdaradici/YoRadio-Theme-Editor/releases
 
+[⬆ Back to start](#subtop)
 
 </details>
+
+[⬆ Back to top](#top)
 
 ---
 
