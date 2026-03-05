@@ -170,6 +170,8 @@ This process may take **5–10 minutes** on the first run.
 
 The setup is complete when there are no more PlatformIO messages in the bottom status bar or in the notification panel on the right side of VSCode.
 
+---
+
 ### 7. Install the pioarduino Platform
 
 The environment is now ready, however **yoRadio Fusion uses the pioarduino platform**, which PlatformIO does not install automatically during the first setup.
@@ -195,6 +197,57 @@ Please wait until the installation finishes. This process may take **20–25 min
 <a href="https://github.com/user-attachments/assets/90b15a64-2678-4258-bc03-c425492bf3e8">
   <img src="https://github.com/user-attachments/assets/90b15a64-2678-4258-bc03-c425492bf3e8" width="400">
 </a>
+
+---
+
+### 8. Final configuration
+
+After the installation finishes, close **VSCode**.
+
+The next step is to apply two modifications required for **language support** and **high-bitrate audio streaming**.
+
+### 1. High Bitrate Audio Fix
+
+After installing **pioarduino**, the following folder will exist:
+
+C:\Users\ **your_username** \.platformio\packages\framework-arduinoespressif32-libs\esp32s3\lib\
+
+In this folder replace the following files:
+
+liblwip.a  
+libesp_netif.a
+
+with the files located in the repository:
+
+yoRadio-main/Audio_IDF_MOD/
+
+This modification is required for **smooth playback of high-bitrate audio streams**.
+
+### 2. Display Font Fix
+
+In the project folder you will find a directory similar to:
+
+C:\platformio\yoRadio\.pio\libdeps\yoradio-esp32s3n16r8-ili9341\ **Adafruit GFX Library** \
+
+Replace the file:
+
+glcdfont.c
+
+with the file located in:
+
+C:\platformio\yoRadio\locale\glcdfont\ **your_language** \glcdfont.c
+
+This modification ensures **correct display of texts and icons on the screen**.
+
+### Important
+
+The folders inside **.pio/libdeps/** are created based on the environment defined in **platformio.ini**:
+
+For this reason the example folder: **yoradio-esp32s3n16r8-ili9341** may have a different name 
+depending on the selected hardware configuration. 
+
+If you use **multiple hardware configurations**, multiple folders will appear inside **libdeps**, 
+and the **font modification must be applied in each of them**.
 
 </details>
 
