@@ -1,6 +1,7 @@
 <p align="center">
 <img width="1536" alt="bitkép" src="https://github.com/user-attachments/assets/ef6b7091-67af-4ebe-9bdc-6cf28449cfff" />
 </p>
+<a name="top"></a>
 
 # yoRadio Fusion – ESP32 Web Radio
 
@@ -16,7 +17,7 @@ https://github.com/e2002/yoradio
 - [Getting Started](#-getting-started)
 - [Version History](#-version-history--changelog)
 - [Credits](#-credits)
-
+  
 ---
 
 ## 🚀 Features
@@ -27,6 +28,7 @@ https://github.com/e2002/yoradio
 - Multilingual nameday system: UA, PL, NL, GR, DE, CZ, HU (Developed by Tamás Várai)
 - Play audio files on DLNA home network via web UI
 
+[⬆ Back to top](#top)
 ---
 
 ## 🖥 Supported Hardware
@@ -35,6 +37,9 @@ https://github.com/e2002/yoradio
 - External DACs (PCM5102A, **CS4344** depending on setup)
 - TF/SD modules, IR receivers, rotary encoders
 - **CST816** / GT911 / XPT2046 / Ft6x36 touch controllers
+
+[⬆ Back to top](#top)
+---
 
 ## 📺 Supported Displays
 
@@ -49,10 +54,11 @@ https://github.com/e2002/yoradio
 - ST7789 320x170
 - ST7735 160x128
 
+[⬆ Back to top](#top)
 ---
 
 ## 🚀 Getting Started
-
+<a name="subtop"></a>
 <details>
 <summary>💻 Firmware Installation</summary>
 
@@ -324,6 +330,7 @@ on the Settings page, in the Update Firmware menu:
   <img src="https://github.com/user-attachments/assets/0ff3e556-5947-4564-b653-7c2d466fc426" width="400">
 </a>
 
+[⬆ Back to top](#subtop)
 ---
 
 </details>
