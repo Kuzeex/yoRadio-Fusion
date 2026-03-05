@@ -101,6 +101,59 @@ Themes can be customized and uploaded separately.
 
 ### Dynamics section
 
+**VU Meter Calibration**
+
+yoRadio Fusion includes a fully tunable VU engine with dynamic range shaping, soft-knee compression, smoothing and gain controls.  
+These parameters allow the VU meter to behave naturally across different hardware, audio sources and display sizes.
+
+**Floor (%)**  
+Noise threshold. Below this level the VU does not move.  
+Lower it to make very quiet passages visible.
+
+**Ceil (%)**  
+Upper limit (headroom). Above this value the signal is compressed.  
+`100%` = no ceiling, full dynamic range.
+
+**Expo (γ)** – Curve steepness  
+- `1.0` → linear  
+- `> 1.0` → compresses low end, emphasizes peaks  
+- `< 1.0` → expands low end, makes quiet parts more “alive”
+
+**Gain**  
+Overall multiplier.  
+Increase if the VU appears too low, decrease if it constantly maxes out.
+
+**Knee (%)**  
+Soft entry threshold.  
+Higher values → smoother and less “snappy” transitions.
+
+**Processing Order in the Engine**
+
+`normalize(floor..ceil) → smoothstep(knee) → powf(expo) → * gain`
+
+⚡ Quick Setup (4 Steps)
+
+1. **Floor**  
+   Lower (or upper) it until you see movement even in quiet sections.  
+   - Small displays: 20–40%  
+   - Large VUs: 10–25%
+
+2. **Ceil**  
+   Start with **100%**.  
+   If peaks slam into the top, reduce to **90–95%**.
+
+3. **Expo**  
+   - VU moves only at the top → decrease (`1.6 → 1.2`)  
+   - Too much low-end activity → increase (`1.0 → 1.3–1.6`)
+
+4. **Gain**  
+   Adjust last to fit the full range.  
+   Increase if it's too low, decrease if it hits the ceiling.
+
+5. **Knee** Fine Tuning
+  - **0–5%** → fast, snappy, more aggressive  
+  - **10–20%** → smoother, less jittery motion
+
 [⬆ Back to top](#top)
 
 ---
