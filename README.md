@@ -253,6 +253,28 @@ Open a **PlatformIO Terminal**
 
 and run the following commands:
 
+**1.** Erease all flash: `pio run -t erase`
+
+**2.** Upload firmware: `pio run -t upload`
+
+**3.** Upload SPIFFS: `pio run -t uploadfs`
+
+⚠️ The first upload may take several minutes.
+
+### 10. Future Firmware Updates
+
+For later updates you can simply use the **Upload icon** in PlatformIO.
+
+<a href="https://github.com/user-attachments/assets/53d39483-74b4-4fd9-902d-8e68786d98a4">
+  <img src="https://github.com/user-attachments/assets/53d39483-74b4-4fd9-902d-8e68786d98a4" width="400">
+</a>
+
+The firmware can also be uploaded **via HTTP OTA** from the **WebUI interface**, 
+on the Settings page, in the Update Firmware menu:
+
+<a href="https://github.com/user-attachments/assets/0ff3e556-5947-4564-b653-7c2d466fc426">
+  <img src="https://github.com/user-attachments/assets/0ff3e556-5947-4564-b653-7c2d466fc426" width="400">
+</a>
 
 </details>
 
