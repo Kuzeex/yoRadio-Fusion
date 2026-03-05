@@ -45,25 +45,7 @@ https://github.com/e2002/yoradio
 ## 🚀 Getting Started
 
 <details>
-<summary>📦 Requirements</summary>
-
-- ESP32-S3 board  
-- PSRAM recommended  
-- PlatformIO
-
-</details>
-
-<details>
-<summary>🔌 Hardware Setup</summary>
-
-- Display wiring  
-- Audio DAC connection  
-- Rotary encoder / buttons  
-
-</details>
-
-<details>
-<summary>💻 Firmware Build</summary>
+<summary>💻 Firmware Installation</summary>
 
  ---
 
@@ -248,6 +230,47 @@ depending on the selected hardware configuration.
 
 If you use **multiple hardware configurations**, multiple folders will appear inside **libdeps**, 
 and the **font modification must be applied in each of them**.
+
+---
+
+### 9. Build and Upload the Firmware
+
+Open **VSCode** and click the **Build icon** in the PlatformIO bottom toolbar.
+
+<a href="https://github.com/user-attachments/assets/2ab0f6ff-afd3-4029-af18-a6c87c628e97">
+  <img src="https://github.com/user-attachments/assets/2ab0f6ff-afd3-4029-af18-a6c87c628e97" width="400">
+</a>
+
+Wait until the first compilation finishes successfully.
+
+Connect your device to the computer using a **USB cable**.
+
+Open a **PlatformIO Terminal**
+
+<a href="https://github.com/user-attachments/assets/756aa022-0720-487e-8eac-5818e338eaa4">
+  <img src="https://github.com/user-attachments/assets/756aa022-0720-487e-8eac-5818e338eaa4" width="400">
+</a>
+
+and run the following commands:
+
+
+</details>
+
+<details>
+<summary>📦 Requirements</summary>
+
+- ESP32-S3 board  
+- PSRAM recommended  
+- PlatformIO
+
+</details>
+
+<details>
+<summary>🔌 Hardware Setup</summary>
+
+- Display wiring  
+- Audio DAC connection  
+- Rotary encoder / buttons  
 
 </details>
 
