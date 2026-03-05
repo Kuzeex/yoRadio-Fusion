@@ -43,11 +43,52 @@ After the configured idle time (bl down interval), the backlight will automatica
 
 ### Layout section
 
+Select from up to **four different VU meter layouts**.
+
+On smaller displays only **three layouts are available**, because the default layout would not fit on the screen.
+
+<img width="530" src="https://github.com/user-attachments/assets/1c41c1b6-976d-4bec-8021-92b1cbde0427" />
+
 [⬆ Back to top](#top)
 
 ---
 
 ### Bands section
+
+To configure the VU meter, it must first be enabled.  
+
+You can also enable it directly in this section.
+
+The following parameters can be adjusted:
+
+- **Number of bands**
+- **Band height** (in the default layout this corresponds to the band width)
+- **Gap** – spacing between bands
+- **Fade speed**
+
+<img width="530" src="https://github.com/user-attachments/assets/ddd69c75-60e4-473e-b77b-5dfeb98017ca" />
+
+For the **Tricolor VU** layout you can also configure:
+
+- **Mid color range** (percentage)
+- **Upper color range** (percentage)
+
+<img width="530" src="https://github.com/user-attachments/assets/ea4b2e58-f01f-464c-b351-6bb228984cf3" />
+
+Additional options:
+
+- **MID Band color** can be disabled or recolored
+- **Peak indicator** can be disabled or recolored
+
+<img width="530" src="https://github.com/user-attachments/assets/63d7cbf8-f699-49e5-aaa3-2ffdc4c596e3" />
+
+- **Band labels** (at the start of each band) can be customized:
+  - adjustable **size**
+  - adjustable **color**
+  - setting the width to **0 or 1 disables the labels**
+
+<img width="530" src="https://github.com/user-attachments/assets/54177b59-1017-409e-bbed-5d56d3632c72" />
+
 
 [⬆ Back to top](#top)
 
