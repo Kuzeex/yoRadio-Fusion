@@ -209,12 +209,40 @@ When enabled, weather information is displayed in a **short format without scrol
 
 <img width="530" src="https://github.com/user-attachments/assets/dfccb6d6-81c3-4411-984b-ef9567ca5d70" />
 
+6. **Weather Icon Set**
+
+The firmware includes **two built-in weather icon sets**.
+
+<img width="530" src="https://github.com/user-attachments/assets/25bd9c78-29ba-4492-a8fb-88db9627633b" />
 
 
----
+7. **Direct Channel Change**
 
+When enabled, the selected station in the **playlist** will start automatically after the configured **return time**,
 
+without requiring an additional click or touch.
 
+<img width="530" src="https://github.com/user-attachments/assets/f7b0e940-faf7-40a2-89a9-3f8be9091be1" />
+
+8. **12 Hours Clock**
+
+Switches the clock display to **12-hour format**.
+
+<img width="530" src="https://github.com/user-attachments/assets/225b2f25-72cd-447d-9bc4-7f00a40d59a8" />
+
+9. **Moving Cursor Playlist Mode**
+
+When enabled, the **cursor moves within the playlist**, 
+
+and page scrolling occurs only when the cursor reaches the bottom of the list.
+
+<img width="530" src="https://github.com/user-attachments/assets/96cdb700-dce4-4449-9afa-cb52ce61fa9a" />
+
+10. **Stall Watchdog**
+
+Stops playback in **internet radio mode** when the playback buffer runs out, then automatically restarts the stream.
+
+<img width="530" src="https://github.com/user-attachments/assets/17f7cc1a-c014-4972-ab98-12d6c3be7574" />
 
 [⬆ Back to top](#top)
 
