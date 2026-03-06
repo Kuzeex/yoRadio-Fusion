@@ -174,6 +174,48 @@ Higher values → smoother and less “snappy” transitions.
 
 ### Miscellaneous section
 
+1. **Date Format**
+
+Select from **five built-in date formats**.
+
+Note: On **320×240 displays** only the first **two options** are available, as the remaining formats are too long.
+
+<img width="530" src="https://github.com/user-attachments/assets/6f8eb0a8-58c0-4069-968d-8d3c8adec0cd" />
+
+2. **Show nameday**
+
+Enable or disable the display of the **current nameday**.
+
+When enabled, a **list icon** appears at the end of the date.  
+The nameday is displayed as a **scrolling text**.
+
+<img width="530" src="https://github.com/user-attachments/assets/5043de91-b756-4440-9405-e807aabd7a2f" />
+
+3. **Clock Font**
+
+The firmware includes **seven built-in clock fonts**.
+
+<img width="530" src="https://github.com/user-attachments/assets/eb5fcba0-8039-4b38-906e-4944582ab0e9" />
+
+4. **Meta Station Name Skip**
+
+When enabled, the **station name** is taken from the **playlist entry** instead of the stream metadata.
+
+<img width="530" src="https://github.com/user-attachments/assets/f3733ce3-34e0-495c-889b-4853563fc3f1" />
+
+5. **Short Weather Info**
+
+When enabled, weather information is displayed in a **short format without scrolling**.
+
+<img width="530" src="https://github.com/user-attachments/assets/dfccb6d6-81c3-4411-984b-ef9567ca5d70" />
+
+
+
+---
+
+
+
+
 [⬆ Back to top](#top)
 
 ---
