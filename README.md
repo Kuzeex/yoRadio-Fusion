@@ -442,7 +442,7 @@ Offline: https://github.com/andrasdaradici/YoRadio-Theme-Editor/releases
  
  • **OTA partition layout** applied to support firmware updates via OTA (Thnx to: nvalw)
 
- • Added **PlatformIO step-by-step installation guide**
+ • Added **PlatformIO step-by-step installation guide** [Getting started](https://github.com/SimZs/yoRadio-Fusion/blob/main/README.md#-getting-started) section --> Firmware installation
 
 ```
 Hardware descriptions and setup guides will be added progressively as time allows
