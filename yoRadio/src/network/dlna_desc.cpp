@@ -13,9 +13,11 @@ bool DlnaDescription::resolveControlURL(const String& descUrl, String& outContro
   WiFiClient client;
 
   Serial.printf("[DLNA] GET %s\n", descUrl.c_str());
-  
-   DlnaHttpGuard lock;
-  
+
+  DlnaHttpGuard lock;
+
+  http.setTimeout(8000);
+
   if (!http.begin(client, descUrl)) {
     Serial.println("[DLNA] HTTP begin failed");
     return false;
@@ -28,18 +30,53 @@ bool DlnaDescription::resolveControlURL(const String& descUrl, String& outContro
     return false;
   }
 
-  String controlPath;
-  bool ok = parseStream(*http.getStreamPtr(), controlPath);
+  String xml = http.getString();
   http.end();
 
-  if (!ok) {
+  if (xml.length() == 0) {
+    Serial.println("[DLNA] Empty XML");
+    return false;
+  }
+
+  // 🔍 Egyszerű ContentDirectory keresés
+  int svc = xml.indexOf("urn:schemas-upnp-org:service:ContentDirectory:1");
+  if (svc < 0) {
     Serial.println("[DLNA] ContentDirectory not found");
     return false;
   }
 
+  int ctrlStart = xml.indexOf("<controlURL>", svc);
+  if (ctrlStart < 0) {
+    Serial.println("[DLNA] controlURL tag not found");
+    return false;
+  }
+
+  ctrlStart += strlen("<controlURL>");
+  int ctrlEnd = xml.indexOf("</controlURL>", ctrlStart);
+  if (ctrlEnd < 0) {
+    Serial.println("[DLNA] controlURL end tag not found");
+    return false;
+  }
+
+  String controlPath = xml.substring(ctrlStart, ctrlEnd);
+
   String base = extractBaseUrl(descUrl);
   outControlUrl = base + controlPath;
 
+  return true;
+}
+
+bool parseString(const String& xml, String& controlPath) {
+  if (xml.indexOf("ContentDirectory") < 0) return false;
+
+  int p = xml.indexOf("<controlURL>");
+  if (p < 0) return false;
+
+  int start = p + 12;
+  int end = xml.indexOf("</controlURL>", start);
+  if (end < 0) return false;
+
+  controlPath = xml.substring(start, end);
   return true;
 }
 

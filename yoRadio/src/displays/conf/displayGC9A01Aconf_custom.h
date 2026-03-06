@@ -14,7 +14,7 @@
 #define TFT_FRAMEWDT    8
 #define MAX_WIDTH       DSP_WIDTH-TFT_FRAMEWDT*2
 #define RSSI_DIGIT      true
-#define bootLogoTop     68
+#define bootLogoTop     15
 #define HIDE_TITLE2
 
 /* SROLLS  */                            /* {{ left, top, fontsize, align }, buffsize, uppercase, width, scrolldelay, scrolldelta, scrolltime } */

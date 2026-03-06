@@ -6,14 +6,17 @@
 #include "../Adafruit_ST7735_and_ST7789_Library/Adafruit_ST7789.h"
 
 #if DSP_MODEL==DSP_ST7789_76
-  #include "fonts/bootlogo62x40.h"
+  #include "fonts/bootlogo_cust64.h" //bootlogo62x40.h
   #include "fonts/dsfont35.h"
 #elif DSP_MODEL==DSP_ST7789_170
-  #include "fonts/bootlogo99x64.h"
+  #include "fonts/bootlogo_cust128.h"  //bootlogo99x64.h
   #include "fonts/dsfont35.h"
-#else
-  #include "fonts/bootlogo99x64.h"
+#elif DSP_MODEL==DSP_ST7789_240
+  #include "fonts/bootlogo_cust128.h"  //bootlogo99x64.h
   #include "fonts/dsfont52.h"
+#else
+  #include "fonts/bootlogo_cust128.h"  //bootlogo99x64.h
+  #include "fonts/dsfont35.h"
 #endif
 
 typedef GFXcanvas16 Canvas;

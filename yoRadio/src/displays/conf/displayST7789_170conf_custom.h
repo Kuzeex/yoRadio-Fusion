@@ -25,7 +25,7 @@
 #else
   #define TITLE_FIX 0
 #endif
-#define bootLogoTop     34
+#define bootLogoTop     5 //34
 
 /* SROLLS  */                            /* {{ left, top, fontsize, align }, buffsize, uppercase, width, scrolldelay, scrolldelta, scrolltime } */
 const ScrollConfig metaConf       PROGMEM = {{ TFT_FRAMEWDT, TFT_FRAMEWDT, 3, WA_CENTER }, 140, true, MAX_WIDTH, 5000, 5, 30 };
@@ -34,7 +34,7 @@ const ScrollConfig title2Conf     PROGMEM = {{ TFT_FRAMEWDT, 72, 2, WA_LEFT }, 1
 const ScrollConfig playlistConf   PROGMEM = {{ TFT_FRAMEWDT, 112, 2, WA_LEFT }, 140, true, MAX_WIDTH, 1000, 2, 30 };
 const ScrollConfig apTitleConf    PROGMEM = {{ TFT_FRAMEWDT, TFT_FRAMEWDT, 3, WA_CENTER }, 140, false, MAX_WIDTH, 0, 4, 20 };
 const ScrollConfig apSettConf     PROGMEM = {{ TFT_FRAMEWDT, DSP_HEIGHT-TFT_FRAMEWDT-16, 2, WA_LEFT }, 140, false, MAX_WIDTH, 0, 4, 30 };
-const ScrollConfig weatherConf    PROGMEM = {{ TFT_FRAMEWDT, 62, 1, WA_LEFT }, 140, true, MAX_WIDTH, 0, 1, 25 };
+const ScrollConfig weatherConf    PROGMEM = {{ TFT_FRAMEWDT, 62, 1, WA_RIGHT }, 140, false, MAX_WIDTH, 0, 1, 25 };
 
 /* BACKGROUNDS  */                       /* {{ left, top, fontsize, align }, width, height, outlined } */
 const FillConfig   metaBGConf     PROGMEM = {{ 0, 0, 0, WA_LEFT }, DSP_WIDTH, 34, false };
@@ -62,10 +62,10 @@ const ProgressConfig bootPrgConf  PROGMEM = { 90, 14, 4 };
 //const BitrateConfig fullbitrateConf PROGMEM = {{DSP_WIDTH-TFT_FRAMEWDT-40, 37, 2, WA_LEFT}, 42 };
 inline BitrateConfig getfullbitrateConf() {
   switch (config.store.vuLayout) {
-    case 1: return {{DSP_WIDTH-TFT_FRAMEWDT-60, 40, 1, WA_LEFT}, 30 };  // Streamline
-    case 2: return {{DSP_WIDTH-TFT_FRAMEWDT-60, 40, 1, WA_LEFT}, 30 };  // Boombox
-    case 3: return {{DSP_WIDTH-TFT_FRAMEWDT-60, 40, 1, WA_LEFT}, 30 };  // Studio
-    default: return {{DSP_WIDTH-TFT_FRAMEWDT-60, 86, 1, WA_LEFT}, 30 }; // Default
+    case 1: return {{DSP_WIDTH-TFT_FRAMEWDT-95, 42, 1, WA_RIGHT}, 30 };  // Streamline
+    case 2: return {{DSP_WIDTH-TFT_FRAMEWDT-95, 42, 1, WA_RIGHT}, 30 };  // Boombox
+    case 3: return {{DSP_WIDTH-TFT_FRAMEWDT-95, 42, 1, WA_RIGHT}, 30 };  // Studio
+    default: return {{DSP_WIDTH-TFT_FRAMEWDT-95, 42, 1, WA_RIGHT}, 30 }; // Default
   }
 }
 
@@ -116,10 +116,10 @@ static constexpr ScrollConfig kDateBase = {
 
 static inline uint16_t dateTopByLayout(uint8_t ly) {
   switch (ly) {
-    case 1:  return 115;  // StreamLine
-    case 2:  return 115;  // BoomBox
-    case 3:  return 115;  // Studio
-    default: return 125;  // Default
+    case 1:  return 118;  // StreamLine
+    case 2:  return 118;  // BoomBox
+    case 3:  return 118;  // Studio
+    default: return 128;  // Default
   }
 }
 

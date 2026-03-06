@@ -18,6 +18,8 @@ static int  clock_tts_prev_volume = 0;
 static unsigned long ttsStepStart = 0;
 static char ttsBuffer[128];
 
+volatile bool g_ttsActive = false;
+
 TaskHandle_t clock_tts_task = nullptr;
 
 enum TTS_STATE {
@@ -64,24 +66,43 @@ bool doFadeUpStep() {
 }
 
 static inline void clock_tts_announcement(char* buf, size_t buflen, int hour, int min, const char* lang) {
+
   if (strncmp(lang, "en", 2) == 0)
     snprintf(buf, buflen, "The time is %d:%02d.", hour, min);
+
   else if (strncmp(lang, "de", 2) == 0)
     snprintf(buf, buflen, "Es ist %d:%02d Uhr.", hour, min);
+
   else if (strncmp(lang, "ru", 2) == 0)
     snprintf(buf, buflen, "Сейчас %d:%02d.", hour, min);
-  else if (strncmp(lang, "ro", 2) == 0)
-    snprintf(buf, buflen, "Este ora %d:%02d.", hour, min);
+
   else if (strncmp(lang, "hu", 2) == 0)
     snprintf(buf, buflen, "A pontos idő %d:%02d.", hour, min);
+
   else if (strncmp(lang, "pl", 2) == 0)
     snprintf(buf, buflen, "Jest godzina %d:%02d.", hour, min);
-  else if (strncmp(lang, "fr", 2) == 0)
-    snprintf(buf, buflen, "Il est %d:%02d.", hour, min);
-  else if (strncmp(lang, "gr", 2) == 0)
-    snprintf(buf, buflen, "I ora einai %d:%02d.", hour, min);
+
   else if (strncmp(lang, "nl", 2) == 0)
-    snprintf(buf, buflen, "De tijd %d:%02d.", hour, min);
+    snprintf(buf, buflen, "Het is %d:%02d uur.", hour, min);
+
+  else if (strncmp(lang, "gr", 2) == 0)
+    snprintf(buf, buflen, "Η ώρα είναι %d:%02d.", hour, min);
+
+  else if (strncmp(lang, "cz", 2) == 0)
+    snprintf(buf, buflen, "Je %d:%02d hodin.", hour, min);
+
+  else if (strncmp(lang, "sk", 2) == 0)
+    snprintf(buf, buflen, "Je %d:%02d hodín.", hour, min);
+
+  else if (strncmp(lang, "ua", 2) == 0)
+    snprintf(buf, buflen, "Зараз %d:%02d.", hour, min);
+
+  else if (strncmp(lang, "it", 2) == 0)
+    snprintf(buf, buflen, "Sono le %d:%02d.", hour, min);
+
+  else if (strncmp(lang, "ro", 2) == 0)
+    snprintf(buf, buflen, "Este ora %d:%02d.", hour, min);
+
   else
     snprintf(buf, buflen, "The time is %d:%02d.", hour, min);
 }
@@ -211,6 +232,7 @@ void clock_tts_task_func(void *param) {
 
         if (millis() - ttsStepStart >= 150) {
 
+          g_ttsActive = true;
           player.lockOutput = true;
           vTaskDelay(pdMS_TO_TICKS(120));
           clock_tts_announcement(ttsBuffer, sizeof(ttsBuffer),
@@ -241,6 +263,7 @@ void clock_tts_task_func(void *param) {
           } else {
             player.lockOutput = false;
             player.setOutputPins(false);
+            g_ttsActive = false;
             ttsState = TTS_IDLE;
           }
 
@@ -279,6 +302,7 @@ void clock_tts_task_func(void *param) {
         if (millis() - ttsStepStart > 12000) {
           player.lockOutput = false;
           player.setVolume(clock_tts_prev_volume);
+          g_ttsActive = false;
           fadeStart = false;
           streamRestart = false;
           ttsState = TTS_IDLE;

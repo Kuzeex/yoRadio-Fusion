@@ -4,7 +4,7 @@
 #include "../dspcore.h"
 #include "utf8To.h"
 
-char* DspCore::utf8To(const char* str, bool uppercase) {
+char* utf8To(const char* str, bool uppercase) {
   int index = 0;
   static char strn[BUFLEN];
   bool E = false;

@@ -18,10 +18,15 @@ QueueHandle_t playerQueue;
 
 #if VS1053_CS!=255 && !I2S_INTERNAL
   #if VS_HSPI
-    Player::Player(): Audio(VS1053_CS, VS1053_DCS, VS1053_DREQ, &SPI2) {}
+    Player::Player(): Audio(VS1053_CS, VS1053_DCS, VS1053_DREQ, &SPI2),
+                      pendingPlayStation(-1),
+                      pendingPlayAt(0) {}
   #else
-    Player::Player(): Audio(VS1053_CS, VS1053_DCS, VS1053_DREQ, &SPI) {}
+    Player::Player(): Audio(VS1053_CS, VS1053_DCS, VS1053_DREQ, &SPI),
+                      pendingPlayStation(-1),
+                      pendingPlayAt(0) {}
   #endif
+
   void ResetChip(){
     pinMode(VS1053_RST, OUTPUT);
     digitalWrite(VS1053_RST, LOW);
@@ -29,12 +34,20 @@ QueueHandle_t playerQueue;
     digitalWrite(VS1053_RST, HIGH);
     delay(100);
   }
+
 #else
+
   #if !I2S_INTERNAL
-    Player::Player() {}
+    Player::Player() :
+      pendingPlayStation(-1),
+      pendingPlayAt(0) {}
   #else
-    Player::Player(): Audio(true, I2S_DAC_CHANNEL_BOTH_EN)  {}
+    Player::Player() :
+      Audio(true, I2S_DAC_CHANNEL_BOTH_EN),
+      pendingPlayStation(-1),
+      pendingPlayAt(0) {}
   #endif
+
 #endif
 
 void Player::init() {
@@ -184,6 +197,14 @@ void resetPlayer(){
   #define PL_QUEUE_TICKS_ST 15
 #endif
 void Player::loop() {
+if (pendingPlayStation >= 0 && millis() >= pendingPlayAt) {
+  int st = pendingPlayStation;
+  pendingPlayStation = -1;
+
+  Serial.printf("[Deferred PLAY safe] %d\n", st);
+  sendCommand({PR_PLAY, st});
+}
+
   if(playerQueue==NULL) return;
   playerRequestParams_t requestP;
   if(xQueueReceive(playerQueue, &requestP, isRunning()?PL_QUEUE_TICKS:PL_QUEUE_TICKS_ST)){
@@ -237,7 +258,7 @@ void Player::loop() {
       }
       #endif
       case PR_VUTONUS: {
-        if(config.vuThreshold>10) config.vuThreshold -=10;
+        if(config.vuRefLevel>10) config.vuRefLevel -=10;
         break;
       }
       case PR_BURL: {
@@ -248,7 +269,53 @@ void Player::loop() {
       #endif
         break;
       }
-          
+      case PR_SWITCH_PLAYLIST: {
+      #ifdef USE_DLNA
+        // Switch playlist source (payload: 0=WEB, 1=DLNA, 2=SD)
+        if(requestP.payload == 0) {
+          // Switch to WEB playlist
+          config.store.playlistSource = PL_SRC_WEB;
+          config.saveValue(&config.store.playlistSource, (uint8_t)PL_SRC_WEB);
+          config.saveValue(&config.store.lastPlayedSource, (uint8_t)PL_SRC_WEB);
+          config.saveValue(&config.store.play_mode, (uint8_t)PM_WEB);
+          telnet.print("##INFO#:\tSwitched to web playlist\n");
+          // Stop current playback and switch to last web station
+          if(isRunning()) {
+            _stop();
+          }
+          // Optionally auto-play last web station
+          // sendCommand({PR_PLAY, config.store.lastStation});
+        } else if(requestP.payload == 1) {
+          // Switch to DLNA playlist
+          config.store.playlistSource = PL_SRC_DLNA;
+          config.saveValue(&config.store.playlistSource, (uint8_t)PL_SRC_DLNA);
+          config.saveValue(&config.store.lastPlayedSource, (uint8_t)PL_SRC_DLNA);
+          config.saveValue(&config.store.play_mode, (uint8_t)PM_WEB);
+          telnet.print("##INFO#:\tSwitched to DLNA playlist\n");
+          if(isRunning()) {
+            _stop();
+          }
+        } else if(requestP.payload == 2) {
+          // Switch to SD card
+#ifdef USE_SD
+          if(SDC_CS != 255 && sdman.cardPresent()) {
+            config.store.playlistSource = PL_SRC_WEB; // SD uses WEB source internally
+            config.saveValue(&config.store.playlistSource, (uint8_t)PL_SRC_WEB);
+            config.saveValue(&config.store.lastPlayedSource, (uint8_t)PL_SRC_WEB);
+            config.saveValue(&config.store.play_mode, (uint8_t)PM_SDCARD);
+            telnet.print("##INFO#:\tSwitched to SD card\n");
+            if(isRunning()) {
+              _stop();
+            }
+          } else {
+            telnet.print("##ERROR#:\tSD card not available\n");
+          }
+#endif
+        }
+      #endif
+        break;
+      }
+
       default: break;
     }
   }
@@ -329,6 +396,17 @@ void Player::_play(uint16_t stationId) {
   }else{
     telnet.printf("##ERROR#:\tError connecting to %.128s\n", config.station.url);
     snprintf(config.tmpBuf, sizeof(config.tmpBuf), "Error connecting to %.128s", config.station.url); setError();
+#ifdef USE_DLNA
+    // If DLNA connection failed, fall back to web playlist (similar to SD card behavior)
+    if (config.store.playlistSource == PL_SRC_DLNA) {
+      telnet.print("##INFO#:\tDLNA failed, switching to web playlist\n");
+      config.store.playlistSource = PL_SRC_WEB;
+      config.saveValue(&config.store.playlistSource, (uint8_t)PL_SRC_WEB);
+      config.saveValue(&config.store.lastPlayedSource, (uint8_t)PL_SRC_WEB);
+      // Optionally reload playlist or switch to last known good web station
+      // config.setLastStation(config.store.lastStation);
+    }
+#endif
     _stop(true);
   };
 }
@@ -431,3 +509,10 @@ void Player::setVol(uint8_t volume) {
   _volTimer = true;
   player.sendCommand({PR_VOL, volume});
 }
+
+#ifdef USE_DLNA
+void Player::switchToWebPlaylist() {
+  sendCommand({PR_SWITCH_PLAYLIST, 0});  // 0 = PL_SRC_WEB
+}
+#endif
+

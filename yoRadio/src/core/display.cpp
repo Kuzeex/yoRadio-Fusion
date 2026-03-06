@@ -86,7 +86,7 @@ DspCore dsp;
 Page *pages[] = { new Page(), new Page(), new Page(), new Page() };
 
 #if !((DSP_MODEL==DSP_ST7735 && DTYPE==INITR_BLACKTAB) || DSP_MODEL==DSP_ST7789 || DSP_MODEL==DSP_ST7796 || DSP_MODEL==DSP_ILI9488 \
- || DSP_MODEL==DSP_ILI9486 || DSP_MODEL==DSP_ILI9341 || DSP_MODEL==DSP_ILI9225 || DSP_MODEL==DSP_ST7789_170 || DSP_MODEL==DSP_NV3041A)
+ || DSP_MODEL==DSP_ILI9486 || DSP_MODEL==DSP_ILI9341 || DSP_MODEL==DSP_ILI9225 || DSP_MODEL==DSP_ST7789_170 || DSP_MODEL==DSP_ST7789_240 || DSP_MODEL==DSP_NV3041A)
   #undef  BITRATE_FULL
   #define BITRATE_FULL     false
 #endif
@@ -141,6 +141,10 @@ void Display::init() {
 uint16_t Display::width(){ return dsp.width(); }
 uint16_t Display::height(){ return dsp.height(); }
 #if (TIME_SIZE > 19) && (DSP_MODEL != DSP_ST7735)
+
+  #undef BOOT_PRG_COLOR
+  #undef BOOT_TXT_COLOR
+  
   #if DSP_MODEL==DSP_SSD1322
     #define BOOT_PRG_COLOR    WHITE
     #define BOOT_TXT_COLOR    WHITE
@@ -239,10 +243,10 @@ void Display::_buildPager(){
   pages[PG_PLAYER]->addWidget(_title1);
   if(_title2) pages[PG_PLAYER]->addWidget(_title2);
   if(_weather) pages[PG_PLAYER]->addWidget(_weather);
-  #if DSP_MODEL==DSP_ILI9488 || DSP_MODEL==DSP_ILI9486 || DSP_MODEL==DSP_NV3041A || DSP_MODEL==DSP_ST7796
+  #if DSP_MODEL==DSP_ILI9488 || DSP_MODEL==DSP_ILI9486 || DSP_MODEL==DSP_NV3041A || DSP_MODEL==DSP_ST7796 || DSP_MODEL==DSP_ST7789  || DSP_MODEL==DSP_ILI9341
   // Minden layouton legyen weather ikon
     if (_weatherIcon) pages[PG_PLAYER]->addWidget(_weatherIcon);
-  #elif DSP_MODEL==DSP_ST7789  || DSP_MODEL==DSP_ILI9341 || DSP_ST7789_170
+  #elif DSP_ST7789_170
   // Csak nem-Default layouton legyen weather ikon
     if (_weatherIcon && config.store.vuLayout != 0) {
       pages[PG_PLAYER]->addWidget(_weatherIcon);
@@ -462,9 +466,14 @@ void Display::resetQueue(){
 }
 
 void Display::_drawPlaylist() {
-  //dsp.drawPlaylist(currentPlItem);
   _plwidget->drawPlaylist(currentPlItem);
-  timekeeper.waitAndReturnPlayer(5);  //original value = 30
+
+  uint8_t stations_list_return_time = config.store.stationsListReturnTime;
+
+  if (stations_list_return_time < 2) stations_list_return_time = 2;
+  if (stations_list_return_time > 30) stations_list_return_time = 30;
+
+  timekeeper.waitAndReturnPlayer(stations_list_return_time);
 }
 
 void Display::_drawNextStationNum(uint16_t num) {

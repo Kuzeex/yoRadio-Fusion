@@ -45,7 +45,7 @@ private:
 
 #include "widgets/widgets.h"
 #include "widgets/pages.h"
-#include "fonts/bootlogo99x64.h"
+#include "fonts/bootlogo_cust128.h"  //bootlogo99x64.h
 
 #ifndef LOGO_WIDTH
   #define LOGO_WIDTH  99

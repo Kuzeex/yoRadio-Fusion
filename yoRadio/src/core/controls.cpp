@@ -1,17 +1,5 @@
-//v0.9.670 // Módosítva. "vol_step" by Tamás Várai
-#if IR_PIN!=255 //new IRRemote Library mod
-#include "../IRremoteESP8266/IRrecv.h"
-#include "../IRremoteESP8266/IRremoteESP8266.h"
-#include "../IRremoteESP8266/IRac.h"
-#include "../IRremoteESP8266/IRtext.h"
-#include "../IRremoteESP8266/IRutils.h"
-
-#ifdef atomic_uint16_t
-#undef atomic_uint16_t
-#endif
-
-#endif
-
+//v0.9.670 // Módosítva. "vol_step"
+//v0.9.670 // Módosítva. "vol_step"
 #include "Arduino.h"
 #include "options.h"
 #include "controls.h"
@@ -70,6 +58,11 @@ constexpr uint8_t nrOfButtons = sizeof(button) / sizeof(button[0]);
 #if IR_PIN!=255
 #include <assert.h>
 
+#include "../IRremoteESP8266/IRrecv.h"
+#include "../IRremoteESP8266/IRremoteESP8266.h"
+#include "../IRremoteESP8266/IRac.h"
+#include "../IRremoteESP8266/IRtext.h"
+#include "../IRremoteESP8266/IRutils.h"
 uint8_t irVolRepeat = 0;
 //const uint16_t kCaptureBufferSize = 1024;
 const uint16_t kMinUnknownSize = 12;
@@ -99,7 +92,7 @@ void initControls() {
 #if ENC_BTNL!=255
   encoder.begin();
   encoder.setup(readEncoderISR);
-  encoder.setBoundaries(0, 254, true);  // true = rotates around, false = rotates min to max
+  encoder.setBoundaries(0, 254, true);
   encoder.setAcceleration(config.store.encacc);
 #endif
 #if ENC2_BTNL!=255
@@ -272,7 +265,6 @@ void irLoop() {
           if(target!=IR_AST && display.mode()==LOST) return;
           if (display.mode() == SCREENSAVER || display.mode() == SCREENBLANK) {
             display.putRequest(NEWMODE, PLAYER);
-            player.sendCommand({PR_PLAY, config.lastStation()});  // MOD: start immediately
             return;
           }
           switch (target){
@@ -465,7 +457,7 @@ void controlsEvent(bool toRight, int8_t volDelta) {
   }
   if (display.mode() != STATIONS) {
     #if !defined(DUMMYDISPLAY) || defined(USE_NEXTION)
-      display.putRequest(NEWMODE, VOL);
+      display.putRequest(NEWMODE, VOL);          // Hangerő képernyőre vált.
     #endif
    if (volDelta != 0) {
       int nv = config.store.volume + volDelta * config.store.volsteps;
@@ -511,7 +503,6 @@ void onBtnClick(int id) {
         }
         if (display.mode() == SCREENSAVER || display.mode() == SCREENBLANK) {
           display.putRequest(NEWMODE, PLAYER);
-          player.sendCommand({PR_PLAY, config.lastStation()});  //MOD: start immediately
           #ifdef DSP_LCD
             delay(200);
           #endif
@@ -563,7 +554,8 @@ void onBtnClick(int id) {
       }
     #ifdef USE_SD
     case EVT_BTNMODE: {
-      config.changeMode();
+      //config.changeMode();
+      config.toggleMode();
       break;
     }
     #endif
@@ -586,7 +578,6 @@ void onBtnDoubleClick(int id) {
     case EVT_BTNCENTER:
     case EVT_ENCBTNB:
     case EVT_ENC2BTNB: {
-        //display.putRequest(NEWMODE, display.mode() == PLAYER ? VOL : PLAYER);
         onBtnClick(EVT_BTNMODE);
         break;
       }
@@ -600,6 +591,7 @@ void onBtnDoubleClick(int id) {
         break;
   }
 }
+
 void setIRTolerance(uint8_t tl){
   config.saveValue(&config.store.irtlp, tl);
 #if IR_PIN!=255

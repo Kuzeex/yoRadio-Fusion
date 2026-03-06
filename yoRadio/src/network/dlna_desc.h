@@ -8,5 +8,6 @@ public:
 
 private:
   bool parseStream(Stream& s, String& outControlPath);
+  bool parseString(const String& xml, String& controlPath);
   String extractBaseUrl(const String& fullUrl);
 };

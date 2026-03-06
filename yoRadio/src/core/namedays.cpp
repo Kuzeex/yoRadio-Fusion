@@ -5,8 +5,8 @@
   #include "../../locale/namedays/namedays_HU.h"
 #elif NAMEDAYS_FILE == PL
   #include "../../locale/namedays/namedays_PL.h"
-//#elif NAMEDAYS_FILE == RU
-//  #include "../../locale/namedays/namedays_RU.h"
+#elif NAMEDAYS_FILE == CZ
+  #include "../../locale/namedays/namedays_CZ.h"
 #elif NAMEDAYS_FILE == GR
   #include "../../locale/namedays/namedays_GR.h"
 #elif NAMEDAYS_FILE == NL

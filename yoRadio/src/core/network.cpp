@@ -1,3 +1,4 @@
+//v0.9.720
 #include "options.h"
 #include <ESPmDNS.h>
 #include "time.h"
@@ -55,6 +56,74 @@ void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
 }
 
 bool MyNetwork::wifiBegin(bool silent){
+	
+	// MOCNY RESET WiFi przed rozpoczęciem
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    delay(1000);  // Dłuższe opóźnienie!
+    WiFi.mode(WIFI_STA);
+    delay(500);
+	
+	
+  uint8_t ls = (config.store.lastSSID == 0 || config.store.lastSSID > config.ssidsCount) ? 0 : config.store.lastSSID - 1;
+  uint8_t startedls = ls;
+  uint8_t errcnt = 0;
+  
+  while (true) {
+    if(!silent){
+      Serial.printf("##[BOOT]#\tAttempt to connect to %s\n", config.ssids[ls].ssid);
+      Serial.print("##[BOOT]#\t");
+      display.putRequest(BOOTSTRING, ls);
+    }
+    // KLUCZOWE: Poczekaj aż WiFi będzie w stanie gotowym
+        WiFi.disconnect(true);
+        while(WiFi.status() == WL_CONNECTED) {
+		delay(100);
+		};
+        
+        // Sprawdź czy WiFi jest gotowy
+        int waitCount = 0;
+        while(WiFi.status() == WL_DISCONNECTED && waitCount < 20) {
+            delay(100);
+            waitCount++;
+        }
+        
+        // Wymuś stan IDLE jeśli nadal łączy
+        if(WiFi.status() != WL_IDLE_STATUS && WiFi.status() != WL_DISCONNECTED) {
+            WiFi.mode(WIFI_OFF);
+            delay(500);
+            WiFi.mode(WIFI_STA);
+            delay(500);
+        }
+    WiFi.begin(config.ssids[ls].ssid, config.ssids[ls].password);
+    while (WiFi.status() != WL_CONNECTED) {
+      if(!silent) Serial.print(".");
+      delay(500);
+      if(REAL_LEDBUILTIN!=255 && !silent) digitalWrite(REAL_LEDBUILTIN, !digitalRead(REAL_LEDBUILTIN));
+      errcnt++;
+      if (errcnt > WIFI_ATTEMPTS) {
+        errcnt = 0;
+        ls++;
+        if (ls > config.ssidsCount - 1) ls = 0;
+        if(!silent) Serial.println();
+        WiFi.mode(WIFI_OFF);
+        break;
+      }
+    }
+    if (WiFi.status() != WL_CONNECTED && ls == startedls) {
+      return false; break;
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+      config.setLastSSID(ls + 1);
+      return true; break;
+    }
+  }
+  return false;
+}
+
+
+/*
+bool MyNetwork::wifiBegin(bool silent){
   uint8_t ls = (config.store.lastSSID == 0 || config.store.lastSSID > config.ssidsCount) ? 0 : config.store.lastSSID - 1;
   uint8_t startedls = ls;
   uint8_t errcnt = 0;
@@ -93,11 +162,11 @@ bool MyNetwork::wifiBegin(bool silent){
   }
   return false;
 }
-
+*/
 void searchWiFi(void * pvParameters){
   if(!network.wifiBegin(true)){
     delay(10000);
-    xTaskCreatePinnedToCore(searchWiFi, "searchWiFi", 1024 * 4, NULL, 3, NULL, SEARCH_WIFI_CORE_ID); // Prio 0 >> 3
+    xTaskCreatePinnedToCore(searchWiFi, "searchWiFi", 1024 * 4, NULL, 3, NULL, SEARCH_WIFI_CORE_ID); // "task_prioritas" 0 eredeti, új 3
   }else{
     network.status = CONNECTED;
     netserver.begin(true);
@@ -134,7 +203,7 @@ void MyNetwork::begin() {
     #endif
   }else{
     status = SDREADY;
-    xTaskCreatePinnedToCore(searchWiFi, "searchWiFi", 1024 * 4, NULL, 3, NULL, SEARCH_WIFI_CORE_ID);  //Prio 0 >> 3
+    xTaskCreatePinnedToCore(searchWiFi, "searchWiFi", 1024 * 4, NULL, 3, NULL, SEARCH_WIFI_CORE_ID); // "task_prioritas" 0 eredeti, 3 új
   }
   
   Serial.println("##[BOOT]#\tdone");
@@ -165,9 +234,9 @@ void MyNetwork::requestTimeSync(bool withTelnetOutput, uint8_t clientId) {
     char timeStringBuff[50];
     strftime(timeStringBuff, sizeof(timeStringBuff), "%Y-%m-%dT%H:%M:%S", &timeinfo);
     if (config.store.tzHour < 0) {
-      telnet.printf(clientId, "##SYS.DATE#: %s%03d:%02d\n> ", timeStringBuff, config.store.tzHour, config.store.tzMin);
+      telnet.printf(clientId, "##SYS.DATE#: %s%03d:%02d\r\n> ", timeStringBuff, config.store.tzHour, config.store.tzMin);
     } else {
-      telnet.printf(clientId, "##SYS.DATE#: %s+%02d:%02d\n> ", timeStringBuff, config.store.tzHour, config.store.tzMin);
+      telnet.printf(clientId, "##SYS.DATE#: %s+%02d:%02d\r\n> ", timeStringBuff, config.store.tzHour, config.store.tzMin);
     }
   }
 }

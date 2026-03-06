@@ -4,7 +4,6 @@
 #include "../dspcore.h"
 #include "utf8To.h"
 
-
 // Polish chars: ąćęłńóśźż ĄĆĘŁŃÓŚŹŻ
 
 #ifndef DSP_LCD

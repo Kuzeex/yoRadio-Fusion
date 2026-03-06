@@ -8,6 +8,7 @@
 #include "../dspcore.h"
 #include "../fonts/clockfont_api.h"
 #include "../fonts/iconsweather.h"
+#include "../fonts/iconsweather_mono.h"
 #include "Arduino.h"
 #include "widgets.h"
 #include "../../core/player.h"    //  for VU widget
@@ -16,6 +17,64 @@
 #include "../tools/l10n.h"
 #include "../tools/psframebuffer.h"
 #include <math.h> 
+
+namespace {
+
+enum WeatherIconId {
+  WI_01D, WI_01N, WI_02D, WI_02N, WI_03, WI_04D, WI_04N,
+  WI_09D, WI_09N, WI_10D, WI_10N, WI_11, WI_13D, WI_13N, WI_50D, WI_50N,
+  WI_UNKNOWN
+};
+
+static WeatherIconId iconIdFromCode(const char* code) {
+  if (!code || !*code) return WI_UNKNOWN;
+
+  if      (strstr(code, "01d")) return WI_01D;
+  else if (strstr(code, "01n")) return WI_01N;
+  else if (strstr(code, "02d")) return WI_02D;
+  else if (strstr(code, "02n")) return WI_02N;
+  else if (strstr(code, "03d") || strstr(code, "03n")) return WI_03;
+  else if (strstr(code, "04d")) return WI_04D;
+  else if (strstr(code, "04n")) return WI_04N;
+  else if (strstr(code, "09d")) return WI_09D;
+  else if (strstr(code, "09n")) return WI_09N;
+  else if (strstr(code, "10d")) return WI_10D;
+  else if (strstr(code, "10n")) return WI_10N;
+  else if (strstr(code, "11d") || strstr(code, "11n")) return WI_11;
+  else if (strstr(code, "13d")) return WI_13D;
+  else if (strstr(code, "13n")) return WI_13N;
+  else if (strstr(code, "50d")) return WI_50D;
+  else if (strstr(code, "50n")) return WI_50N;
+
+  return WI_UNKNOWN;
+}
+
+struct IconSet {
+  const uint16_t* icons[WI_UNKNOWN];  // WI_UNKNOWN-ig (tehát 16 db)
+  const uint16_t* fallback;
+  uint16_t w;
+  uint16_t h;
+};
+
+static const IconSet ICONSET_CLASSIC = {
+  { img_01d, img_01n, img_02d, img_02n, img_03, img_04d, img_04n,
+    img_09d, img_09n, img_10d, img_10n, img_11, img_13d, img_13n, img_50d, img_50n },
+  eradio,
+  64, 64
+};
+
+static const IconSet ICONSET_MONO = {
+  { mono__01d, mono__01n, mono__02d, mono__02n, mono__03, mono__04d, mono__04n,
+    mono__09d, mono__09n, mono__10d, mono__10n, mono__11, mono__13d, mono__13n, mono__50d, mono__50n },
+  mono_eradio,
+  64, 64
+};
+
+static const IconSet& currentIconSet() {
+  return (config.store.weatherIconSet == 1) ? ICONSET_MONO : ICONSET_CLASSIC;
+}
+
+} // namespace
 
 static inline void _pad2(char* out, int v) {
   out[0] = '0' + (v / 10);
@@ -35,12 +94,12 @@ static void formatDateCustom(char* out, size_t outlen, const tm& t, uint8_t fmt)
 #if L10N_LANGUAGE == HU
   // Hungarian
   switch (fmt) {
-    case 1: // 2025. 09. 16. - kedd 
-      snprintf(out, outlen, "%d. %s. %s. - %s", y, m2, d2, dow);
+    case 1: // 2025. szeptember 16.  
+      snprintf(out, outlen, "%d. %s %d.", y, month, t.tm_mday);
       break;
 
-    case 2: // 2025. szeptember 16.  
-      snprintf(out, outlen, "%d. %s %d.", y, month, t.tm_mday);
+    case 2: // 2025. 09. 16. - kedd 
+      snprintf(out, outlen, "%d. %s. %s. - %s", y, m2, d2, dow);
       break;
 
     case 3: // 2025 szeptember 16. kedd  
@@ -61,12 +120,12 @@ static void formatDateCustom(char* out, size_t outlen, const tm& t, uint8_t fmt)
   #ifdef USDATE
     // US format MM/DD/YYYY)
     switch (fmt) {
-      case 1: // Tue - 09.16.2025
-        snprintf(out, outlen, "%s - %s.%s.%d", dow, m2, d2, y);
+      case 1: // September 16, 2025
+        snprintf(out, outlen, "%s %d, %d", month, t.tm_mday, y);
         break;
 
-      case 2: // September 16, 2025
-        snprintf(out, outlen, "%s %d, %d", month, t.tm_mday, y);
+      case 2: // Tue - 09.16.2025
+        snprintf(out, outlen, "%s - %s.%s.%d", dow, m2, d2, y);
         break;
 
       case 3: // Tue, September 16, 2025
@@ -85,12 +144,12 @@ static void formatDateCustom(char* out, size_t outlen, const tm& t, uint8_t fmt)
   #else
     // National format (DD/MM/YYYY)
     switch (fmt) {
-      case 1: // Tue - 16.09.2025 
-        snprintf(out, outlen, "%s - %s. %s. %d", dow, d2, m2, y);
+      case 1: // 16 September 2025   
+        snprintf(out, outlen, "%d. %s %d", t.tm_mday, month, y);
         break;
 
-      case 2: // 16 September 2025   
-        snprintf(out, outlen, "%d. %s %d", t.tm_mday, month, y);
+      case 2: // Tue - 16.09.2025 
+        snprintf(out, outlen, "%s - %s. %s. %d", dow, d2, m2, y);
         break;
 
       case 3: // Tue, 16 September 2025  
@@ -118,6 +177,8 @@ static inline size_t utf8len(const char* s) {
   }
   return len;
 }
+
+static uint32_t vuLastDecay = 0;
 
 static inline float _applyVuCurve(float x, uint8_t ly) {
     // 0..1 normalizált bemenet
@@ -573,97 +634,351 @@ void SliderWidget::_clear() {
 void SliderWidget::_reset() {
   _oldvalwidth = 0;
 }
+
 /************************
       VU WIDGET
  ************************/
 #if !defined(DSP_LCD) && !defined(DSP_OLED)
+
 VuWidget::~VuWidget() {
-  if(_canvas) free(_canvas);
+  if (_canvas) {
+    delete _canvas;
+    _canvas = nullptr;
+  }
 }
 
-void VuWidget::init(WidgetConfig wconf, VUBandsConfig bands, uint16_t vumaxcolor, uint16_t vumincolor, uint16_t bgcolor) {
+void VuWidget::init(WidgetConfig wconf, VUBandsConfig bands,
+                    uint16_t vumaxcolor, uint16_t vumincolor, uint16_t bgcolor) {
   Widget::init(wconf, bgcolor, bgcolor);
   _vumaxcolor = vumaxcolor;
   _vumincolor = vumincolor;
-  _bands = bands;
+  _bands      = bands;
 
-  _maxDimension = _config.align ? _bands.width : _bands.height;  // max szélesség/magasság
+  _maxDimension = _config.align ? _bands.width : _bands.height;
 
   _peakL = 0;
   _peakR = 0;
   _peakFallDelayCounter = 0;
 
-  // VU layout
+  // Canvas méret: NEM változtatjuk!
   switch (config.store.vuLayout) {
-    case 3: // Studio 
+    case 3: // Studio
       _canvas = new Canvas(_maxDimension, _bands.height * 2 + _bands.space);
       break;
-    case 2: // Boombox 
-    case 1: // Streamline 
+    case 2: // Boombox
+    case 1: // Streamline
       _canvas = new Canvas(_maxDimension * 2 + _bands.space, _bands.height);
       break;
     case 0:
-    default: // Default 
+    default: // Default
       _canvas = new Canvas(_bands.width * 2 + _bands.space, _maxDimension);
       break;
   }
 }
 
+static inline void _labelTextStyle(Canvas* c, uint16_t textColor) {
+  c->setFont();
+  c->setTextSize(1);
+  c->setTextColor(textColor);
+  c->setTextWrap(false);
+}
+
+static inline void _drawCenteredCharInBox(Canvas* c,
+                                         int boxX, int boxY, int boxW, int boxH,
+                                         char ch)
+{
+  char s[2] = { ch, 0 };
+
+  int16_t tbx, tby;
+  uint16_t tbw, tbh;
+  c->getTextBounds(s, 0, 0, &tbx, &tby, &tbw, &tbh);
+
+  int cx = boxX + (boxW - (int)tbw) / 2 - tbx;
+  int cy = boxY + (boxH - (int)tbh) / 2 - tby;
+
+  c->setCursor(cx, cy);
+  c->print(s);
+}
+
+// Studio: bal oldali oszlop, két sor
+void VuWidget::_drawLabelsVertical(int x, int y, int h, int labelSize) {
+  uint16_t bg  = config.store.vuLabelBgColor;
+  uint16_t txt = config.store.vuLabelTextColor;
+  _labelTextStyle(_canvas, txt);
+
+  const int pad = 1;
+  int boxW = labelSize - 2 * pad;
+  if (boxW < 1) return;
+
+  int boxX = x + pad;
+
+  // L
+  int boxY = y;
+  _canvas->fillRect(boxX, boxY, boxW, h, bg);
+  #if DSP_MODEL != DSP_ST7735
+  _drawCenteredCharInBox(_canvas, boxX, boxY, boxW, h, 'L');
+  #endif
+
+  // R
+  boxY = y + h + _bands.space;
+  _canvas->fillRect(boxX, boxY, boxW, h, bg);
+  #if DSP_MODEL != DSP_ST7735
+  _drawCenteredCharInBox(_canvas, boxX, boxY, boxW, h, 'R');
+  #endif
+}
+
+// Default: alul egy csík, L/R cellával
+void VuWidget::_drawLabelsHorizontal(int x, int y, int w, int labelSize) {
+  uint16_t bg  = config.store.vuLabelBgColor;
+  uint16_t txt = config.store.vuLabelTextColor;
+  _labelTextStyle(_canvas, txt);
+
+  const int pad = 1;
+  int boxH = labelSize - 2 * pad;
+  if (boxH < 1) return;
+
+  _canvas->fillRect(x, y + pad, w, boxH, bg);
+
+  int cellW = w / 2;
+  int boxY  = y + pad;
+
+  _drawCenteredCharInBox(_canvas, x,         boxY, cellW,     boxH, 'L');
+  _drawCenteredCharInBox(_canvas, x + cellW, boxY, w-cellW,   boxH, 'R');
+}
+
+// Egy darab label doboz (szélessége = labelSize)
+void VuWidget::_drawSingleLabel(int x, int y, int h, char ch, int labelSize)
+{
+  uint16_t bg  = config.store.vuLabelBgColor;
+  uint16_t txt = config.store.vuLabelTextColor;
+  _labelTextStyle(_canvas, txt);
+
+  const int pad = 1;
+  int boxW = labelSize - 2 * pad;
+  if (boxW < 1) return;
+
+  int boxX = x + pad;
+
+  _canvas->fillRect(boxX, y, boxW, h, bg);
+  _drawCenteredCharInBox(_canvas, boxX, y, boxW, h, ch);
+}
+
 void VuWidget::_draw() {
-  if(!_active || _locked) return;
+  if (!_active || _locked) return;
 
-  static uint16_t measL = 0, measR = 0;
-  static float smoothL = 0, smoothR = 0;
-  static float peakSmoothL = 0, peakSmoothR = 0;
+  // ------------------------------------------------------------
+  // GEO: egyetlen közös geometria (a label MINDIG a VU-ból vesz el!)
+  // ------------------------------------------------------------
+  struct Geo {
+    uint8_t ly;
 
-  uint16_t bandColor;
-  const uint16_t _vumidcolor = config.store.vuMidColor;
+    int canvasW, canvasH;
 
-  // --- input scaling ---
-  uint16_t vulevel_raw = player.getVUlevel(_maxDimension);  // "audio_change" nem kell paraméter
-  uint16_t L_raw = (vulevel_raw >> 8) & 0xFF;
-  uint16_t R_raw = (vulevel_raw) & 0xFF;
+    // label méret + flag
+    int labelSize;
+    bool showLabels;
 
-  uint16_t L_lin = 255 - L_raw;
-  uint16_t R_lin = 255 - R_raw;
+    // alap gap (a két csatorna közti fix rés)
+    int gap;
 
-  float vuNorm_L = (float)L_lin / 255.0f;
-  float vuNorm_R = (float)R_lin / 255.0f;
+    // Default (függőleges) VU terület (két oszlop)
+    int def_vuX, def_vuY, def_vuW, def_vuH; // def_vuW == canvasW, def_vuH == canvasH-labelSize
 
-  uint8_t ly = config.store.vuLayout;
-  float vuAdj_L = _applyVuCurve(vuNorm_L, ly);
-  float vuAdj_R = _applyVuCurve(vuNorm_R, ly);
+    // Studio (két sor) VU terület
+    int std_vuX, std_vuY, std_vuW, std_vuH; // std_vuW == canvasW-labelSize, std_vuH == _bands.height
 
-  uint16_t L_scaled = (uint16_t)roundf(vuAdj_L * _maxDimension);
-  uint16_t R_scaled = (uint16_t)roundf(vuAdj_R * _maxDimension);
-  if (L_scaled > _maxDimension) L_scaled = _maxDimension;
-  if (R_scaled > _maxDimension) R_scaled = _maxDimension;
+    // Streamline: két csatorna egymás mellett, mindkettőből levágunk labelSize-t balról
+    int str_LX, str_LW; // teljes csatorna sáv (névleges: _maxDimension)
+    int str_RX, str_RW;
+    int str_vuLX, str_vuLW; // tényleges VU rész (label levonva)
+    int str_vuRX, str_vuRW;
 
-  // --- bands param ---
-  uint8_t bandsCount = _bands.perheight;
-  uint16_t h = _maxDimension / bandsCount;
-  const float alpha_up   = REF_BY_LAYOUT(config.store, vuAlphaUp, ly) / 100.0f;
-  const float alpha_down = REF_BY_LAYOUT(config.store, vuAlphaDn, ly) / 100.0f;
-  uint8_t midPct  = REF_BY_LAYOUT(config.store, vuMidPct,  ly);
-  uint8_t highPct = REF_BY_LAYOUT(config.store, vuHighPct, ly);
+    // Boombox: középről kifelé, a label a közép környékén a csatornákból vesz el
+    int bbx_center;
+    int bbx_leftEdge;   // bal csatorna "belső" széle (közép felőli)
+    int bbx_rightEdge;  // jobb csatorna "belső" széle (közép felőli)
+    int bbx_lblLX, bbx_lblRX; // label dobozok X kezdete (L a gap bal oldalán, R a gap jobb oldalán)
+    int bbx_vuLW;       // bal csatorna max hossza (a label levonása után)
+    int bbx_vuRW;       // jobb csatorna max hossza
+    int bbx_vuY, bbx_vuH;
+
+    int scaleDim; // 0..scaleDim (a VU “hossza”)
+  } g;
+
+  g.ly = config.store.vuLayout;
+
+  // --- layoutfüggő label méret ---
+  switch (g.ly) {
+    case 3: g.labelSize = config.store.vuLabelHeightStd; break; // Studio
+    case 2: g.labelSize = config.store.vuLabelHeightBbx; break; // Boombox
+    case 1: g.labelSize = config.store.vuLabelHeightStr; break; // Streamline
+    case 0:
+    default: g.labelSize = config.store.vuLabelHeightDef; break; // Default
+  }
+  if (g.labelSize < 0) g.labelSize = 0;
+  g.showLabels = (g.labelSize > 2);
+
+  // --- canvas méretek (a meglévő init logikával egyezően) ---
+  g.canvasW = (g.ly == 3) ? (int)_maxDimension
+            : (g.ly == 0) ? (int)(_bands.width * 2 + _bands.space)
+                          : (int)(_maxDimension * 2 + _bands.space);
+
+  g.canvasH = (g.ly == 3) ? (int)(_bands.height * 2 + _bands.space)
+            : (g.ly == 0) ? (int)_maxDimension
+                          : (int)_bands.height;
+
+  g.gap = (int)_bands.space;
+  if (g.gap < 0) g.gap = 0;
+
+  // --- Default geometry (függőleges) ---
+  g.def_vuX = 0;
+  g.def_vuY = 0;
+  g.def_vuW = g.canvasW;
+  g.def_vuH = g.canvasH - g.labelSize;
+  if (g.def_vuH < 1) g.def_vuH = 1;
+
+  // --- Studio geometry (két sor, label bal oldalt) ---
+  g.std_vuX = g.labelSize;
+  g.std_vuY = 0;
+  g.std_vuW = g.canvasW - g.labelSize;
+  if (g.std_vuW < 1) g.std_vuW = 1;
+  g.std_vuH = (int)_bands.height;
+
+  // --- Streamline geometry ---
+  // két csatorna: [0.._maxDimension] és [(_maxDimension+gap)..]
+  g.str_LX = 0;
+  g.str_LW = (int)_maxDimension;
+  g.str_RX = (int)_maxDimension + g.gap;
+  g.str_RW = (int)_maxDimension;
+
+  // label mindkét csatornából levág
+  int cut = g.showLabels ? g.labelSize : 0;
+  if (cut > g.str_LW - 1) cut = g.str_LW - 1;
+  if (cut < 0) cut = 0;
+
+  g.str_vuLX = g.str_LX + cut;
+  g.str_vuLW = g.str_LW - cut;
+  g.str_vuRX = g.str_RX + cut;
+  g.str_vuRW = g.str_RW - cut;
+  if (g.str_vuLW < 1) g.str_vuLW = 1;
+  if (g.str_vuRW < 1) g.str_vuRW = 1;
+
+  // --- Boombox geometry (középről kifelé) ---
+  g.bbx_center    = g.canvasW / 2;
+  g.bbx_leftEdge  = g.bbx_center - (g.gap / 2); // bal csatorna belső széle
+  g.bbx_rightEdge = g.bbx_center + (g.gap / 2); // jobb csatorna belső széle
+
+  // label a gap két oldalán, és a csatornákból vesz el
+  int bbxLabel = g.showLabels ? g.labelSize : 0;
+  // ha túl nagy, legalább 1px maradjon a csatornának
+  int maxLeft  = g.bbx_leftEdge;
+  int maxRight = g.canvasW - g.bbx_rightEdge;
+  if (bbxLabel > maxLeft - 1)  bbxLabel = maxLeft - 1;
+  if (bbxLabel > maxRight - 1) bbxLabel = maxRight - 1;
+  if (bbxLabel < 0) bbxLabel = 0;
+
+  g.bbx_lblLX = g.bbx_leftEdge - bbxLabel;
+  g.bbx_lblRX = g.bbx_rightEdge;
+
+  g.bbx_vuLW = g.bbx_leftEdge - bbxLabel;          // bal csatorna max hossza (0..bbx_vuLW)
+  g.bbx_vuRW = g.canvasW - (g.bbx_rightEdge + bbxLabel); // jobb csatorna max hossza
+  if (g.bbx_vuLW < 1) g.bbx_vuLW = 1;
+  if (g.bbx_vuRW < 1) g.bbx_vuRW = 1;
+
+  g.bbx_vuY = 0;
+  g.bbx_vuH = g.canvasH;
+
+  // --- scaleDim (VU hossza) layout szerint ---
+  switch (g.ly) {
+    case 0: g.scaleDim = g.def_vuH; break;                 // függőleges
+    case 3: g.scaleDim = g.std_vuW; break;                 // Studio: vízszintes hossza
+    case 1: g.scaleDim = min(g.str_vuLW, g.str_vuRW); break; // Streamline: csatorna hossza
+    case 2: g.scaleDim = min(g.bbx_vuLW, g.bbx_vuRW); break; // Boombox: csatorna hossza
+    default: g.scaleDim = g.def_vuH; break;
+  }
+  if (g.scaleDim < 1) return;
+
+  // ------------------------------------------------------------
+  // INPUT + SCALING
+  // ------------------------------------------------------------
+  uint16_t vulevel = player.getVUlevel();
+
+  uint16_t L_raw = (vulevel >> 8) & 0xFF;
+  uint16_t R_raw = (vulevel) & 0xFF;
+
+
+  // AUTOGAIN
+  uint16_t currentMax = max(L_raw, R_raw);
+
+  uint32_t now = millis();
+
+  if (currentMax > config.vuRefLevel)
+      config.vuRefLevel = currentMax;
+
+  static uint32_t vuLastDecay = 0;
+
+  if (now - vuLastDecay > 120) //original value 200
+  {
+      vuLastDecay = now;
+
+      if (config.vuRefLevel > 1)
+          config.vuRefLevel--;
+  }
+
+  if (config.vuRefLevel < 50)
+      config.vuRefLevel = 50;
+
+
+  // SCALE
+  uint16_t vuLpx = map(L_raw, 0, config.vuRefLevel, 0, g.scaleDim);
+  uint16_t vuRpx = map(R_raw, 0, config.vuRefLevel, 0, g.scaleDim);
+
+
+  // CURVE
+  float vuNorm_L = (float)vuLpx / g.scaleDim;
+  float vuNorm_R = (float)vuRpx / g.scaleDim;
+
+  float vuAdj_L = _applyVuCurve(vuNorm_L, g.ly);
+  float vuAdj_R = _applyVuCurve(vuNorm_R, g.ly);
+
+  uint16_t L_scaled = (uint16_t)roundf(vuAdj_L * g.scaleDim);
+  uint16_t R_scaled = (uint16_t)roundf(vuAdj_R * g.scaleDim);
+
+  // ------------------------------------------------------------
+  // BANDS + COLORS + SMOOTH
+  // ------------------------------------------------------------
+  const uint16_t vumidcolor = config.store.vuMidColor;
+  const uint8_t  bandsCount = _bands.perheight ? _bands.perheight : 1;
+  const uint16_t h = (uint16_t)max(1, g.scaleDim / (int)bandsCount);
+
+  const float alpha_up   = REF_BY_LAYOUT(config.store, vuAlphaUp, g.ly) / 100.0f;
+  const float alpha_down = REF_BY_LAYOUT(config.store, vuAlphaDn, g.ly) / 100.0f;
+
+  uint8_t midPct  = REF_BY_LAYOUT(config.store, vuMidPct,  g.ly);
+  uint8_t highPct = REF_BY_LAYOUT(config.store, vuHighPct, g.ly);
+
   const uint16_t peakColor = config.store.vuPeakColor;
-  int cfgBars = (int)REF_BY_LAYOUT(config.store, vuBarCount, ly);
+
+  int cfgBars = (int)REF_BY_LAYOUT(config.store, vuBarCount, g.ly);
   int effectiveBars = (int)bandsCount;
   if (effectiveBars <= 0) effectiveBars = cfgBars;
-  
+  if (effectiveBars <= 0) effectiveBars = 1;
+
   int midBandIndex  = (effectiveBars * midPct  + 99) / 100;
   int highBandIndex = (effectiveBars * highPct + 99) / 100;
-  
-  if (midBandIndex  < 0)               midBandIndex  = 0;
-  if (highBandIndex < 0)               highBandIndex = 0;
-  if (midBandIndex  > effectiveBars)   midBandIndex  = effectiveBars;
-  if (highBandIndex > effectiveBars)   highBandIndex = effectiveBars;
-  if (highBandIndex < midBandIndex)    highBandIndex = midBandIndex;
-  
-  // --- up/down smoothing ---
-  smoothL = (L_scaled > smoothL) ? (alpha_up * L_scaled + (1.0f - alpha_up) * smoothL)
+  if (midBandIndex  < 0) midBandIndex = 0;
+  if (highBandIndex < 0) highBandIndex = 0;
+  if (midBandIndex  > effectiveBars) midBandIndex = effectiveBars;
+  if (highBandIndex > effectiveBars) highBandIndex = effectiveBars;
+  if (highBandIndex < midBandIndex) highBandIndex = midBandIndex;
+
+  static float smoothL = 0, smoothR = 0;
+  static float peakSmoothL = 0, peakSmoothR = 0;
+  static uint16_t measL = 0, measR = 0;
+
+  smoothL = (L_scaled > smoothL) ? (alpha_up   * L_scaled + (1.0f - alpha_up)   * smoothL)
                                  : (alpha_down * L_scaled + (1.0f - alpha_down) * smoothL);
-  smoothR = (R_scaled > smoothR) ? (alpha_up * R_scaled + (1.0f - alpha_up) * smoothR)
+  smoothR = (R_scaled > smoothR) ? (alpha_up   * R_scaled + (1.0f - alpha_up)   * smoothR)
                                  : (alpha_down * R_scaled + (1.0f - alpha_down) * smoothR);
 
   bool played = player.isRunning();
@@ -671,179 +986,232 @@ void VuWidget::_draw() {
     measL = (L_raw >= measL) ? (measL + _bands.fadespeed) : L_raw;
     measR = (R_raw >= measR) ? (measR + _bands.fadespeed) : R_raw;
   } else {
-    if (measL < _maxDimension) measL += _bands.fadespeed;
-    if (measR < _maxDimension) measR += _bands.fadespeed;
+    if (measL < (uint16_t)g.scaleDim) measL += _bands.fadespeed;
+    if (measR < (uint16_t)g.scaleDim) measR += _bands.fadespeed;
     peakSmoothL = 0; peakSmoothR = 0;
   }
-  if (measL > _maxDimension) measL = _maxDimension;
-  if (measR > _maxDimension) measR = _maxDimension;
+  if (measL > (uint16_t)g.scaleDim) measL = (uint16_t)g.scaleDim;
+  if (measR > (uint16_t)g.scaleDim) measR = (uint16_t)g.scaleDim;
 
-   #if DSP_MODEL == DSP_ST7735
-      int peakWidth = 2;
-   #else
-      int peakWidth = 4;
-   #endif
-  switch (config.store.vuLayout) {
-    case 3: { // Studio 
-      _canvas->fillRect(0, 0, _maxDimension, _bands.height * 2 + _bands.space, _bgcolor);
+#if DSP_MODEL == DSP_ST7735
+  const int peakWidth = 2;
+#else
+  const int peakWidth = 4;
+#endif
 
-      uint16_t drawL = (uint16_t)smoothL;
-      uint16_t drawR = (uint16_t)smoothR;
-      uint16_t snappedL = ((drawL + h - 1) / h) * h;
-      uint16_t snappedR = ((drawR + h - 1) / h) * h;
+  // ------------------------------------------------------------
+  // CLEAR CANVAS
+  // ------------------------------------------------------------
+  _canvas->fillRect(0, 0, g.canvasW, g.canvasH, _bgcolor);
 
-      // peak 
-      const float p_up       = REF_BY_LAYOUT(config.store, vuPeakUp,  ly) / 100.0f;
-      const float p_down     = REF_BY_LAYOUT(config.store, vuPeakDn,  ly) / 100.0f;
-      peakSmoothL = (drawL > peakSmoothL) ? (p_up * drawL + (1 - p_up) * peakSmoothL)
-                                          : (p_down * drawL + (1 - p_down) * peakSmoothL);
-      peakSmoothR = (drawR > peakSmoothR) ? (p_up * drawR + (1 - p_up) * peakSmoothR)
-                                          : (p_down * drawR + (1 - p_down) * peakSmoothR);
+  // ------------------------------------------------------------
+  // DRAW LABELS (mindenhol a VU-ból levonva számolt geo szerint!)
+  // ------------------------------------------------------------
+  switch (g.ly) {
+    case 0: // Default: alul
+      if (g.showLabels) _drawLabelsHorizontal(0, g.def_vuH, g.canvasW, g.labelSize);
+      break;
 
-      int peakOfs = 10;
-      int peakX_L = constrain((int)std::max((int)snappedL, (int)peakSmoothL + peakOfs), 0, (int)_maxDimension - peakWidth);
-      int peakX_R = constrain((int)std::max((int)snappedR, (int)peakSmoothR + peakOfs), 0, (int)_maxDimension - peakWidth);
+    case 3: // Studio: bal oszlop, két sor
+      if (g.showLabels) _drawLabelsVertical(0, 0, _bands.height, g.labelSize);
+      break;
+
+    case 1: // Streamline: label mindkét csatornában baloldalt
+      if (g.showLabels) {
+        _drawSingleLabel(g.str_LX, 0, _bands.height, 'L', g.labelSize);
+        _drawSingleLabel(g.str_RX, 0, _bands.height, 'R', g.labelSize);
+      }
+      break;
+
+    case 2: // Boombox: label a gap két oldalán (L bal oldal, R jobb oldal), a csatornákból levonva
+      if (g.showLabels) {
+        _drawSingleLabel(g.bbx_lblLX, 0, _bands.height, 'L', g.labelSize);
+        _drawSingleLabel(g.bbx_lblRX, 0, _bands.height, 'R', g.labelSize);
+      }
+      break;
+  }
+
+  // ------------------------------------------------------------
+  // PEAK SMOOTH + SNAP
+  // ------------------------------------------------------------
+  uint16_t drawL = (uint16_t)smoothL;
+  uint16_t drawR = (uint16_t)smoothR;
+
+  const float p_up   = REF_BY_LAYOUT(config.store, vuPeakUp, g.ly) / 100.0f;
+  const float p_down = REF_BY_LAYOUT(config.store, vuPeakDn, g.ly) / 100.0f;
+
+  peakSmoothL = (drawL > peakSmoothL) ? (p_up * drawL + (1 - p_up) * peakSmoothL)
+                                      : (p_down * drawL + (1 - p_down) * peakSmoothL);
+  peakSmoothR = (drawR > peakSmoothR) ? (p_up * drawR + (1 - p_up) * peakSmoothR)
+                                      : (p_down * drawR + (1 - p_down) * peakSmoothR);
+
+  uint16_t snappedL = ((drawL + h - 1) / h) * h;
+  uint16_t snappedR = ((drawR + h - 1) / h) * h;
+  if (snappedL > (uint16_t)g.scaleDim) snappedL = (uint16_t)g.scaleDim;
+  if (snappedR > (uint16_t)g.scaleDim) snappedR = (uint16_t)g.scaleDim;
+
+  // ------------------------------------------------------------
+  // DRAW BARS (switch-case, átlátható)
+  // ------------------------------------------------------------
+  switch (g.ly) {
+
+    case 3: { // ===================== Studio =====================
+      const int peakOfs = 10;
+      int peakX_L = constrain((int)max((int)snappedL, (int)peakSmoothL + peakOfs), 0, g.scaleDim - peakWidth);
+      int peakX_R = constrain((int)max((int)snappedR, (int)peakSmoothR + peakOfs), 0, g.scaleDim - peakWidth);
 
       for (int band = 0; band < bandsCount; band++) {
         int i = band * h;
-        int bandWidth = h - _bands.space; if (band == bandsCount - 1) bandWidth = h;
-        bandColor = (band < midBandIndex) ? _vumincolor : (band < highBandIndex ? _vumidcolor : _vumaxcolor);
-        if (i + bandWidth <= snappedL)
-          _canvas->fillRect(i, 0, bandWidth, _bands.height, bandColor);
-        if (i + bandWidth <= snappedR)
-          _canvas->fillRect(i, _bands.height + _bands.space, bandWidth, _bands.height, bandColor);
-      }
-      _canvas->fillRect(peakX_L, 0, peakWidth, _bands.height, peakColor);
-      _canvas->fillRect(peakX_R, _bands.height + _bands.space, peakWidth, _bands.height, peakColor);
+        int bandW = h - _bands.space;
+        if (band == bandsCount - 1) bandW = h;
 
-      dsp.drawRGBBitmap(_config.left, _config.top, _canvas->getBuffer(), _maxDimension, _bands.height * 2 + _bands.space);
+        uint16_t col = (band < midBandIndex) ? _vumincolor : (band < highBandIndex ? vumidcolor : _vumaxcolor);
+
+        if (i + bandW <= snappedL)
+          _canvas->fillRect(g.std_vuX + i, 0, bandW, _bands.height, col);
+
+        if (i + bandW <= snappedR)
+          _canvas->fillRect(g.std_vuX + i, _bands.height + _bands.space, bandW, _bands.height, col);
+      }
+
+      _canvas->fillRect(g.std_vuX + peakX_L, 0, peakWidth, _bands.height, peakColor);
+      _canvas->fillRect(g.std_vuX + peakX_R, _bands.height + _bands.space, peakWidth, _bands.height, peakColor);
     } break;
 
-    case 2: { // Boombox 
-      _canvas->fillRect(0, 0, _maxDimension * 2 + _bands.space, _bands.height, _bgcolor);
+    case 1: { // ===================== Streamline =====================
+      const int peakOfs = 4;
 
-      uint16_t drawL = (uint16_t)smoothL;
-      uint16_t drawR = (uint16_t)smoothR;
-      uint16_t snappedL = ((drawL + h - 1) / h) * h;
-      uint16_t snappedR = ((drawR + h - 1) / h) * h;
-
-      const float p_up       = REF_BY_LAYOUT(config.store, vuPeakUp,  ly) / 100.0f;
-      const float p_down     = REF_BY_LAYOUT(config.store, vuPeakDn,  ly) / 100.0f;
-      peakSmoothL = (drawL > peakSmoothL) ? (p_up * drawL + (1 - p_up) * peakSmoothL)
-                                          : (p_down * drawL + (1 - p_down) * peakSmoothL);
-      peakSmoothR = (drawR > peakSmoothR) ? (p_up * drawR + (1 - p_up) * peakSmoothR)
-                                          : (p_down * drawR + (1 - p_down) * peakSmoothR);
-
-      int peakOfs = 10;
-      int peakLenL = (int)std::max((int)snappedL, (int)peakSmoothL); // hossz a középtől
-      int peakX_L  = _bands.width - peakLenL - peakOfs - peakWidth;  // kifelé (balra) toljuk
-      peakX_L = std::max(0, std::min((int)_bands.width - peakWidth, peakX_L));
-
-      int peakLenR = (int)std::max((int)snappedR, (int)peakSmoothR); // hossz a középtől
-      int peakX_R  = _bands.width + _bands.space + peakLenR + peakOfs; // kifelé (jobbra) toljuk
-      peakX_R = std::max((int)_bands.width + (int)_bands.space,
-                   std::min((int)(_bands.width + _bands.space + _bands.width - peakWidth), peakX_R));
+      // bal csatorna VU: g.str_vuLX.. + g.scaleDim
+      int peakX_L = constrain((int)max((int)snappedL, (int)peakSmoothL + peakOfs), 0, g.scaleDim - peakWidth);
+      int peakX_R = constrain((int)max((int)snappedR, (int)peakSmoothR + peakOfs), 0, g.scaleDim - peakWidth);
 
       for (int band = 0; band < bandsCount; band++) {
         int i = band * h;
-        int bandWidth = h - _bands.vspace; if (band == bandsCount - 1) bandWidth = h;
-        bandColor = (band < midBandIndex) ? _vumincolor : (band < highBandIndex ? _vumidcolor : _vumaxcolor);
-        if (i + bandWidth <= snappedL)
-          _canvas->fillRect(_bands.width - i - bandWidth, 0, bandWidth, _bands.height, bandColor);
-        if (i + bandWidth <= snappedR)
-          _canvas->fillRect(i + _bands.width + _bands.space, 0, bandWidth, _bands.height, bandColor);
+        int bandW = h - _bands.vspace;
+        if (band == bandsCount - 1) bandW = h;
+
+        uint16_t col = (band < midBandIndex) ? _vumincolor : (band < highBandIndex ? vumidcolor : _vumaxcolor);
+
+        if (i + bandW <= snappedL)
+          _canvas->fillRect(g.str_vuLX + i, 0, bandW, _bands.height, col);
+
+        if (i + bandW <= snappedR)
+          _canvas->fillRect(g.str_vuRX + i, 0, bandW, _bands.height, col);
       }
+
+      _canvas->fillRect(g.str_vuLX + peakX_L, 0, peakWidth, _bands.height, peakColor);
+      _canvas->fillRect(g.str_vuRX + peakX_R, 0, peakWidth, _bands.height, peakColor);
+    } break;
+
+    case 2: { // ===================== Boombox =====================
+      const int peakOfs = 10;
+
+      // bal: a belső széltől (bbx_lblLX) BALRA rajzolunk, max hossza g.scaleDim
+      // jobb: a belső széltől (bbx_lblRX + labelSize) JOBBRA
+      int leftInner  = g.bbx_lblLX;                 // L label bal széle (itt kezdődik a "közép előtti" blokk)
+      int rightInner = g.bbx_lblRX + g.labelSize;   // R label utáni rész a jobb csatornának
+
+      // csatorna végek
+      int leftMinX   = 0;
+      int leftMaxX   = leftInner;                   // ideig rajzolhatunk (bal csatorna jobboldali széle)
+      int rightMinX  = rightInner;
+      int rightMaxX  = g.canvasW;
+
+      // peak hely
+      int peakLenL = (int)max((int)snappedL, (int)peakSmoothL);
+      int peakLenR = (int)max((int)snappedR, (int)peakSmoothR);
+
+      int peakX_L = leftMaxX - peakLenL - peakOfs - peakWidth;
+      int peakX_R = rightMinX + peakLenR + peakOfs;
+
+      if (peakX_L < leftMinX) peakX_L = leftMinX;
+      if (peakX_L > leftMaxX - peakWidth) peakX_L = leftMaxX - peakWidth;
+
+      if (peakX_R < rightMinX) peakX_R = rightMinX;
+      if (peakX_R > rightMaxX - peakWidth) peakX_R = rightMaxX - peakWidth;
+
+      for (int band = 0; band < bandsCount; band++) {
+        int i = band * h;
+        int bandW = h - _bands.vspace;
+        if (band == bandsCount - 1) bandW = h;
+
+        uint16_t col = (band < midBandIndex) ? _vumincolor : (band < highBandIndex ? vumidcolor : _vumaxcolor);
+
+        // bal: belső széltől BALRA
+        if (i + bandW <= snappedL) {
+          int x = leftMaxX - i - bandW;
+          if (x < leftMinX) x = leftMinX;
+          _canvas->fillRect(x, 0, bandW, _bands.height, col);
+        }
+
+        // jobb: belső széltől JOBBRA
+        if (i + bandW <= snappedR) {
+          int x = rightMinX + i;
+          if (x + bandW > rightMaxX) bandW = max(1, rightMaxX - x);
+          _canvas->fillRect(x, 0, bandW, _bands.height, col);
+        }
+      }
+
       _canvas->fillRect(peakX_L, 0, peakWidth, _bands.height, peakColor);
       _canvas->fillRect(peakX_R, 0, peakWidth, _bands.height, peakColor);
-
-      dsp.drawRGBBitmap(_config.left, _config.top, _canvas->getBuffer(), _maxDimension * 2 + _bands.space, _bands.height);
-    } break;
-
-    case 1: { // Streamline 
-      _canvas->fillRect(0, 0, _maxDimension * 2 + _bands.space, _bands.height, _bgcolor);
-
-      uint16_t drawL = (uint16_t)smoothL;
-      uint16_t drawR = (uint16_t)smoothR;
-      uint16_t snappedL = ((drawL + h - 1) / h) * h;
-      uint16_t snappedR = ((drawR + h - 1) / h) * h;
-
-      const float p_up       = REF_BY_LAYOUT(config.store, vuPeakUp,  ly) / 100.0f;
-      const float p_down     = REF_BY_LAYOUT(config.store, vuPeakDn,  ly) / 100.0f;
-      peakSmoothL = (drawL > peakSmoothL) ? (p_up * drawL + (1 - p_up) * peakSmoothL)
-                                          : (p_down * drawL + (1 - p_down) * peakSmoothL);
-      peakSmoothR = (drawR > peakSmoothR) ? (p_up * drawR + (1 - p_up) * peakSmoothR)
-                                          : (p_down * drawR + (1 - p_down) * peakSmoothR);
-
-      int peakOfs = 4;
-      int peakX_L = constrain((int)std::max((int)snappedL, (int)peakSmoothL + peakOfs), 0, (int)_bands.width - peakWidth);
-      int peakX_R = constrain((int)std::max((int)snappedR, (int)peakSmoothR + peakOfs), 0, (int)_bands.width - peakWidth);
-
-      for (int band = 0; band < bandsCount; band++) {
-        int i = band * h;
-        int bandWidth = h - _bands.vspace; if (band == bandsCount - 1) bandWidth = h;
-        bandColor = (band < midBandIndex) ? _vumincolor : (band < highBandIndex ? _vumidcolor : _vumaxcolor);
-        if (i + bandWidth/2 < snappedL)
-          _canvas->fillRect(i, 0, bandWidth, _bands.height, bandColor);
-        if (i + bandWidth <= snappedR)
-          _canvas->fillRect(i + _bands.width + _bands.space, 0, bandWidth, _bands.height, bandColor);
-      }
-      _canvas->fillRect(peakX_L, 0, peakWidth, _bands.height, peakColor);
-      _canvas->fillRect(peakX_R + _bands.width + _bands.space, 0, peakWidth, _bands.height, peakColor);
-
-      dsp.drawRGBBitmap(_config.left, _config.top, _canvas->getBuffer(), _maxDimension * 2 + _bands.space, _bands.height);
     } break;
 
     case 0:
-    default: { // Default 
-      _canvas->fillRect(0, 0, _bands.width * 2 + _bands.space, _maxDimension, _bgcolor);
+    default: { // ===================== Default (vertical) =====================
+      const int peakOfs = 4;
 
-      uint16_t drawL = (uint16_t)smoothL;
-      uint16_t drawR = (uint16_t)smoothR;
-      uint16_t snappedL = ((drawL + h - 1) / h) * h;
-      uint16_t snappedR = ((drawR + h - 1) / h) * h;
+      int peakY_L = constrain((int)peakSmoothL + peakOfs, 0, g.scaleDim - peakWidth);
+      int peakY_R = constrain((int)peakSmoothR + peakOfs, 0, g.scaleDim - peakWidth);
 
-      const float p_up       = REF_BY_LAYOUT(config.store, vuPeakUp,  ly) / 100.0f;
-      const float p_down     = REF_BY_LAYOUT(config.store, vuPeakDn,  ly) / 100.0f;
-      peakSmoothL = (drawL > peakSmoothL) ? (p_up * drawL + (1 - p_up) * peakSmoothL)
-                                          : (p_down * drawL + (1 - p_down) * peakSmoothL);
-      peakSmoothR = (drawR > peakSmoothR) ? (p_up * drawR + (1 - p_up) * peakSmoothR)
-                                          : (p_down * drawR + (1 - p_down) * peakSmoothR);
-
-      int peakOfs = 4;
-      int peakY_L = constrain((int)peakSmoothL + peakOfs, 0, (int)_maxDimension - peakWidth);
-      int peakY_R = constrain((int)peakSmoothR + peakOfs, 0, (int)_maxDimension - peakWidth);
+      int baseY = g.def_vuY + g.def_vuH;
 
       for (int band = 0; band < bandsCount; band++) {
         int i = band * h;
-        int bandHeight = h - _bands.vspace; if (band == bandsCount - 1) bandHeight = h;
-        bandColor = (band < midBandIndex) ? _vumincolor : (band < highBandIndex ? _vumidcolor : _vumaxcolor);
-        if (i + bandHeight/2 < snappedL)
-          _canvas->fillRect(0, _maxDimension - i - bandHeight, _bands.width, bandHeight, bandColor);
-        if (i + bandHeight <= snappedR)
-          _canvas->fillRect(_bands.width + _bands.space, _maxDimension - i - bandHeight, _bands.width, bandHeight, bandColor);
-      }
-      _canvas->fillRect(0, _maxDimension - peakY_L - peakWidth, _bands.width, peakWidth, peakColor);
-      _canvas->fillRect(_bands.width + _bands.space, _maxDimension - peakY_R - peakWidth, _bands.width, peakWidth, peakColor);
+        int bandH = h - _bands.vspace;
+        if (band == bandsCount - 1) bandH = h;
 
-      dsp.drawRGBBitmap(_config.left, _config.top, _canvas->getBuffer(), _bands.width * 2 + _bands.space, _maxDimension);
+        uint16_t col = (band < midBandIndex) ? _vumincolor : (band < highBandIndex ? vumidcolor : _vumaxcolor);
+
+        if (i + bandH <= snappedL)
+          _canvas->fillRect(0, baseY - i - bandH, _bands.width, bandH, col);
+
+        if (i + bandH <= snappedR)
+          _canvas->fillRect(_bands.width + _bands.space, baseY - i - bandH, _bands.width, bandH, col);
+      }
+
+      _canvas->fillRect(0, baseY - peakY_L - peakWidth, _bands.width, peakWidth, peakColor);
+      _canvas->fillRect(_bands.width + _bands.space, baseY - peakY_R - peakWidth, _bands.width, peakWidth, peakColor);
     } break;
   }
+
+  // ------------------------------------------------------------
+  // BLIT TO DISPLAY
+  // ------------------------------------------------------------
+  dsp.drawRGBBitmap(_config.left, _config.top, _canvas->getBuffer(), g.canvasW, g.canvasH);
 }
 
-void VuWidget::loop(){
-  if(_active && !_locked) _draw();
+void VuWidget::loop() {
+  if (_active && !_locked) _draw();
 }
 
 void VuWidget::_clear() {
   switch (config.store.vuLayout) {
-    case 3: dsp.fillRect(_config.left, _config.top, _maxDimension, _bands.height * 2 + _bands.space, _bgcolor); break;
+    case 3:
+      dsp.fillRect(_config.left, _config.top, _maxDimension, _bands.height * 2 + _bands.space, _bgcolor);
+      break;
     case 2:
-    case 1: dsp.fillRect(_config.left, _config.top, _maxDimension * 2 + _bands.space, _bands.height, _bgcolor); break;
+    case 1:
+      dsp.fillRect(_config.left, _config.top, _maxDimension * 2 + _bands.space, _bands.height, _bgcolor);
+      break;
     case 0:
-    default: dsp.fillRect(_config.left, _config.top, _bands.width * 2 + _bands.space, _maxDimension, _bgcolor); break;
+    default:
+      dsp.fillRect(_config.left, _config.top, _bands.width * 2 + _bands.space, _maxDimension, _bgcolor);
+      break;
   }
 }
+
 #else // DSP_LCD
+
 VuWidget::~VuWidget() {}
 void VuWidget::init(WidgetConfig wconf, VUBandsConfig bands, uint16_t vumaxcolor, uint16_t vumincolor, uint16_t bgcolor) {
   Widget::init(wconf, bgcolor, bgcolor);
@@ -851,6 +1219,7 @@ void VuWidget::init(WidgetConfig wconf, VUBandsConfig bands, uint16_t vumaxcolor
 void VuWidget::_draw() {}
 void VuWidget::loop() {}
 void VuWidget::_clear() {}
+
 #endif
 
 /************************
@@ -1007,12 +1376,12 @@ void ProgressWidget::loop() {
 void ClockWidget::init(WidgetConfig wconf, uint16_t fgcolor, uint16_t bgcolor){
   Widget::init(wconf, fgcolor, bgcolor);
   _timeheight = _textHeight();
-  _fullclock = TIME_SIZE>35 || DSP_MODEL==DSP_ILI9225 || DSP_MODEL==DSP_ST7789_170 || DSP_MODEL==DSP_ST7735;
-#if DSP_MODEL == DSP_ST7789 || DSP_MODEL==DSP_ILI9341
+  _fullclock = TIME_SIZE>35 || DSP_MODEL==DSP_ILI9225 || DSP_MODEL==DSP_ST7789_170 || DSP_MODEL==DSP_ST7735 || DSP_MODEL == DSP_ST7789 || DSP_MODEL==DSP_ILI9341;
+/*#if DSP_MODEL == DSP_ST7789 || DSP_MODEL==DSP_ILI9341
     if (config.store.vuLayout != 0) {
         _fullclock = false;
     }
-#endif
+#endif*/
   if(_fullclock) _superfont = TIME_SIZE / 17; //magick
   else if(TIME_SIZE==19 || TIME_SIZE==2) _superfont=1;
   else _superfont=0;
@@ -1048,11 +1417,11 @@ void ClockWidget::_begin(){
 }
 
 bool ClockWidget::_getTime(){
-  #if defined AM_PM_STYLE
+  if (config.store.hours12) {
   strftime(_timebuffer, sizeof(_timebuffer), "%I:%M", &network.timeinfo);
-  #else
+  } else {
   strftime(_timebuffer, sizeof(_timebuffer), "%H:%M", &network.timeinfo);
-  #endif
+  }
   bool ret = network.timeinfo.tm_sec==0 || _forceflag!=network.timeinfo.tm_year;
   _forceflag = network.timeinfo.tm_year;
   return ret;
@@ -1147,7 +1516,7 @@ void ClockWidget::_printClock(bool force){
 
     gfx.setCursor(_left(), _top());
 
-    #if defined(AM_PM_STYLE)
+  if (config.store.hours12) {
     if (_timebuffer[0] == '0') {
       int16_t leadX = _left();
       int16_t leadY = _top() - _timeheight + 1; 
@@ -1167,11 +1536,11 @@ void ClockWidget::_printClock(bool force){
     } else {
       gfx.print(_timebuffer);
     }
-    #else
+  } else {
     gfx.print(_timebuffer);
-    #endif
+  }
 
-    if(_fullclock){
+ /*   if(_fullclock){
       // lines, date & dow
       bool fullClockOnScreensaver = (!config.isScreensaver || (_fb->ready() && FULL_SCR_CLOCK));
       _linesleft = _left()+_timewidth+_space;
@@ -1179,16 +1548,10 @@ void ClockWidget::_printClock(bool force){
 int16_t hlineBaseY = secBaseY + secCellH;
 if (hlineBaseY >= _top()) hlineBaseY = _top() - 1;
 
-#ifdef AM_PM_STYLE
+if (config.store.hours12) {
 
   // függőleges elválasztó (marad, ahogy volt)
-  gfx.drawFastVLine(
-    _linesleft,
-    secBaseY - 5,
-    _top() - secBaseY + 10,
-    config.theme.div
-  );
-
+  gfx.drawFastVLine(_linesleft, secBaseY - 5, _top() - secBaseY + 10, config.theme.div);
   gfx.setFont();
 
   // ---- VÍZSZINTES VONAL Y KISZÁMÍTÁSA (EGY HELYEN!) ----
@@ -1197,7 +1560,7 @@ if (hlineBaseY >= _top()) hlineBaseY = _top() - 1;
   uint8_t ampmTextSize;
 
   if (TIME_SIZE == 19) {
-    yLine        = hlineBaseY + _space/2 - 4;
+    yLine        = hlineBaseY + _space/2 - 8;
     ampmTextY    = hlineBaseY + CHARHEIGHT - 8;
     ampmTextSize = 1;
   } else {
@@ -1210,13 +1573,8 @@ if (hlineBaseY >= _top()) hlineBaseY = _top() - 1;
   }
 
   // ---- VONAL RAJZOLÁS + ELMENTÉS ----
-  gfx.drawFastHLine(
-    _linesleft,
-    yLine,
-    CHARWIDTH * _superfont * 2 + _space + 15,
-    config.theme.div
-  );
-  divY = yLine;   // 🔑 EZ AZ EGÉSZ TRÜKK LÉNYEGE
+  gfx.drawFastHLine(_linesleft, yLine, CHARWIDTH * _superfont * 2 + _space + 15, config.theme.div);
+  divY = yLine; 
 
   // ---- AM / PM FELIRAT ----
   gfx.setCursor(_linesleft + _space + 1, ampmTextY);
@@ -1227,7 +1585,7 @@ if (hlineBaseY >= _top()) hlineBaseY = _top() - 1;
   strftime(buf, sizeof(buf), "%p", &network.timeinfo);
   gfx.print(buf);
 
-#else  // ----- 24 ÓRÁS NÉZET -----
+} else { // ----- 24 ÓRÁS NÉZET -----
 
   gfx.drawFastVLine(
     _linesleft,
@@ -1246,7 +1604,7 @@ if (hlineBaseY >= _top()) hlineBaseY = _top() - 1;
   );
   divY = yLine;   // itt is eltároljuk, egységesen
 
-#endif
+}
 
         formatDateCustom(_tmp, sizeof(_tmp), ti, config.store.dateFormat);
         #ifndef HIDE_DATE
@@ -1262,7 +1620,7 @@ if (hlineBaseY >= _top()) hlineBaseY = _top() - 1;
         gfx.print(_datebuf);
         #endif
       }
-    }
+    }*/
   }
 
 // ------------------------------------------------------------
@@ -1277,7 +1635,7 @@ if (_fullclock) {
     int16_t hlineBaseY = secBaseY + secCellH;
     if (hlineBaseY >= _top()) hlineBaseY = _top() - 1;
 
-#ifdef AM_PM_STYLE
+if (config.store.hours12) {
     // függőleges elválasztó (marad)
     gfx.drawFastVLine(_linesleft, secBaseY - 5, _top() - secBaseY + 10, config.theme.div);
 
@@ -1319,14 +1677,14 @@ if (_fullclock) {
     strftime(buf, sizeof(buf), "%p", &network.timeinfo);
     gfx.print(buf);
 
-#else
+} else {
     // 24 órás
     gfx.drawFastVLine(_linesleft, secBaseY, _top() - secBaseY, config.theme.div);
 
     const int16_t yLine = hlineBaseY + _space/2;
     gfx.drawFastHLine(_linesleft, yLine, CHARWIDTH * _superfont * 2 + _space, config.theme.div);
     divY = yLine;
-#endif
+}
 
     // dátum (ha nincs HIDE_DATE)
     formatDateCustom(_tmp, sizeof(_tmp), ti, config.store.dateFormat);
@@ -1378,9 +1736,9 @@ if (_fullclock || _superfont > 0) {
 
     // Y pozíció (baseline)
     y = secBaseY + secCellH + bl - 2;
-#ifdef AM_PM_STYLE
+if (config.store.hours12) {
     y -= 7;
-#endif
+}
 
     // "88" bounding box (szélesség + tbx kompenzáció)
     int16_t tbx, tby;
@@ -1682,62 +2040,263 @@ void BitrateWidget::_clear() {
                  _bgcolor);
 }
 
-/**************************
-      PLAYLIST WIDGET
- **************************/
-void PlayListWidget::init(ScrollWidget* current){
+/**********************************************************************************
+                                          PLAYLIST WIDGET
+    **********************************************************************************/
+void PlayListWidget::init(ScrollWidget* current) {
   Widget::init({0, 0, 0, WA_LEFT}, 0, 0);
   _current = current;
-  #ifndef DSP_LCD
-  _plItemHeight = playlistConf.widget.textsize*(CHARHEIGHT-1)+playlistConf.widget.textsize*4;
-  _plTtemsCount = round((float)dsp.height()/_plItemHeight);
-  if(_plTtemsCount%2==0) _plTtemsCount++;
-  _plCurrentPos = _plTtemsCount/2;
-  _plYStart = (dsp.height() / 2 - _plItemHeight / 2) - _plItemHeight * (_plTtemsCount - 1) / 2 + playlistConf.widget.textsize*2;
-  #else
+
+#ifndef DSP_LCD
+  _plItemHeight = playlistConf.widget.textsize * (CHARHEIGHT - 1)
+                + playlistConf.widget.textsize * 4;
+
+  if (_plItemHeight < 10) _plItemHeight = 10;
+
+  _plTtemsCount = (dsp.height() - 2) / _plItemHeight;
+  if (_plTtemsCount < 1) _plTtemsCount = 1;
+  if (_plTtemsCount > MAX_PL_PAGE_ITEMS)
+      _plTtemsCount = MAX_PL_PAGE_ITEMS;
+
+  // center alignment
+  uint16_t contentHeight = _plTtemsCount * _plItemHeight;
+  _plYStart = (dsp.height() - contentHeight) / 2;
+
+  // center-scroll módhoz legyen páratlan elemszám
+  if ((_plTtemsCount % 2) == 0 && _plTtemsCount > 1)
+      _plTtemsCount--;
+
+  _plCurrentPos = _plTtemsCount / 2;
+
+  // moving cache reset
+  for (int i = 0; i < MAX_PL_PAGE_ITEMS; i++)
+      _plCache[i] = "";
+
+  _plLoadedPage = -1;
+  _plLastGlobalPos = -1;
+  _plLastDrawTime = 0;
+
+#else
   _plTtemsCount = PLMITEMS;
   _plCurrentPos = 1;
-  #endif
+#endif
+}
+
+void PlayListWidget::_loadPlaylistPage(int pageIndex, int itemsPerPage) {
+
+  for (int i = 0; i < MAX_PL_PAGE_ITEMS; i++)
+      _plCache[i] = "";
+
+  if (config.playlistLength() == 0) return;
+
+  File playlist = config.SDPLFS()->open(REAL_PLAYL, "r");
+  File index    = config.SDPLFS()->open(REAL_INDEX, "r");
+  if (!playlist || !index) return;
+
+  int startIdx = pageIndex * itemsPerPage;
+
+  for (int i = 0; i < itemsPerPage; i++) {
+
+    int globalIdx = startIdx + i;
+    if (globalIdx >= config.playlistLength()) break;
+
+    index.seek(globalIdx * 4, SeekSet);
+
+    uint32_t posAddr;
+    if (index.readBytes((char*)&posAddr, 4) != 4) break;
+
+    playlist.seek(posAddr, SeekSet);
+
+    String line = playlist.readStringUntil('\n');
+    int tabIdx = line.indexOf('\t');
+    if (tabIdx > 0) line = line.substring(0, tabIdx);
+    line.trim();
+
+    if (config.store.numplaylist && line.length() > 0)
+      _plCache[i] = String(globalIdx + 1) + " " + line;
+    else
+      _plCache[i] = line;
+  }
+
+  playlist.close();
+  index.close();
+}
+
+void PlayListWidget::drawPlaylist(uint16_t currentItem) {
+
+#ifndef DSP_LCD
+  if (config.store.playlistMode == 1) {
+    _drawMovingCursor(currentItem);
+  } else {
+    _drawScrollCenter(currentItem);
+  }
+#else
+  dsp.clear();
+  _fillPlMenu(currentItem - _plCurrentPos, _plTtemsCount);
+  dsp.setCursor(0, 1);
+  dsp.write(uint8_t(126));
+#endif
+}
+
+void PlayListWidget::_drawMovingCursor(uint16_t currentItem) {
+
+  bool isLongPause = (millis() - _plLastDrawTime > 2000);
+  _plLastDrawTime = millis();
+
+  int activeIdx   = (currentItem > 0) ? (currentItem - 1) : 0;
+  int itemsPerPage = _plTtemsCount;
+
+  int newPage     = activeIdx / itemsPerPage;
+  int newLocalPos = activeIdx % itemsPerPage;
+
+  _plCurrentPos = newLocalPos;
+
+  bool pageChanged = (newPage != _plLoadedPage);
+
+  if (pageChanged || isLongPause || _plCache[0].length() == 0) {
+
+    if (pageChanged || _plCache[0].length() == 0) {
+      _loadPlaylistPage(newPage, itemsPerPage);
+      _plLoadedPage = newPage;
+    }
+
+    dsp.fillRect(0, _plYStart,
+                 dsp.width(),
+                 itemsPerPage * _plItemHeight,
+                 config.theme.background);
+
+    for (int i = 0; i < itemsPerPage; i++)
+      _printMoving(i, _plCache[i].c_str());
+
+  } else {
+
+    int oldLocalPos = -1;
+    if (_plLastGlobalPos > 0) {
+       int oldIdx = _plLastGlobalPos - 1;
+       oldLocalPos = oldIdx % itemsPerPage;
+    }
+
+    if (oldLocalPos >= 0 &&
+        oldLocalPos < itemsPerPage &&
+        oldLocalPos != newLocalPos) {
+
+        _printMoving(oldLocalPos, _plCache[oldLocalPos].c_str());
+    }
+
+    _printMoving(newLocalPos, _plCache[newLocalPos].c_str());
+  }
+
+  _plLastGlobalPos = currentItem;
+}
+
+void PlayListWidget::_printMoving(uint8_t pos, const char* item) {
+
+  if (pos >= _plTtemsCount) return;
+
+  int16_t yPos = _plYStart + pos * _plItemHeight;
+  bool isSelected = (pos == _plCurrentPos);
+
+  uint16_t fgColor = isSelected
+        ? config.theme.plcurrent
+        : config.theme.playlist[0];
+
+  uint16_t bgColor = config.theme.background;
+
+  dsp.fillRect(0, yPos, dsp.width(),
+               _plItemHeight - 1,
+               bgColor);
+
+  if (item && item[0] != '\0') {
+    dsp.setTextColor(fgColor, bgColor);
+    dsp.setTextSize(playlistConf.widget.textsize);
+    dsp.setCursor(TFT_FRAMEWDT, yPos + 4);
+    dsp.print(utf8To(item, true));
+  }
+}
+
+void PlayListWidget::_drawScrollCenter(uint16_t currentItem) {
+
+  uint8_t lastPos =
+    _fillPlMenu((int)currentItem - _plCurrentPos,
+                _plTtemsCount);
+
+  if (lastPos < _plTtemsCount) {
+    dsp.fillRect(0,
+                 lastPos * _plItemHeight + _plYStart,
+                 dsp.width(),
+                 dsp.height() / 2,
+                 config.theme.background);
+  }
+}
+
+void PlayListWidget::_printScroll(uint8_t pos,
+                                  const char* item) {
+
+  dsp.setTextSize(playlistConf.widget.textsize);
+
+  if (pos == _plCurrentPos) {
+    _current->setText(item);
+  } else {
+
+    uint8_t dist =
+      abs((int)pos - (int)_plCurrentPos);
+
+    uint8_t plColor =
+      (dist > 5) ? 4 : (dist - 1);
+
+    dsp.setTextColor(
+      config.theme.playlist[plColor],
+      config.theme.background);
+
+    dsp.setCursor(TFT_FRAMEWDT,
+                  _plYStart + pos * _plItemHeight);
+
+    dsp.fillRect(0,
+                 _plYStart + pos * _plItemHeight - 1,
+                 dsp.width(),
+                 _plItemHeight - 2,
+                 config.theme.background);
+
+    dsp.print(utf8To(item, true));
+  }
 }
 
 uint8_t PlayListWidget::_fillPlMenu(int from, uint8_t count) {
-  int     ls      = from;
-  uint8_t c       = 0;
-  bool    finded  = false;
-  if (config.playlistLength() == 0) {
-    return 0;
-  }
-  File playlist = config.SDPLFS()->open(REAL_PLAYL, "r");
-  File index = config.SDPLFS()->open(REAL_INDEX, "r");
-  while (true) {
-    if (ls < 1) {
-      ls++;
-      _printPLitem(c, "");
-      c++;
-      continue;
+    int     ls = from;
+    uint8_t c = 0;
+    bool    finded = false;
+    if (config.playlistLength() == 0) { return 0; }
+    File playlist = config.SDPLFS()->open(REAL_PLAYL, "r");
+    File index = config.SDPLFS()->open(REAL_INDEX, "r");
+    while (true) {
+        if (ls < 1) {
+            ls++;
+            _printScroll(c, "");
+            c++;
+            continue;
+        }
+        if (!finded) {
+            index.seek((ls - 1) * 4, SeekSet);
+            uint32_t pos;
+            index.readBytes((char*)&pos, 4);
+            finded = true;
+            index.close();
+            playlist.seek(pos, SeekSet);
+        }
+        bool pla = true;
+        while (pla) {
+            pla = playlist.available();
+            String stationName = playlist.readStringUntil('\n');
+            stationName = stationName.substring(0, stationName.indexOf('\t'));
+            if (config.store.numplaylist && stationName.length() > 0) { stationName = String(from + c) + " " + stationName; }
+            _printScroll(c, stationName.c_str());
+            c++;
+            if (c >= count) { break; }
+        }
+        break;
     }
-    if (!finded) {
-      index.seek((ls - 1) * 4, SeekSet);
-      uint32_t pos;
-      index.readBytes((char *) &pos, 4);
-      finded = true;
-      index.close();
-      playlist.seek(pos, SeekSet);
-    }
-    bool pla = true;
-    while (pla) {
-      pla = playlist.available();
-      String stationName = playlist.readStringUntil('\n');
-      stationName = stationName.substring(0, stationName.indexOf('\t'));
-      if(config.store.numplaylist && stationName.length()>0) stationName = String(from+c)+" "+stationName;
-      _printPLitem(c, stationName.c_str());
-      c++;
-      if (c >= count) break;
-    }
-    break;
-  }
-  playlist.close();
-  return c;
+    playlist.close();
+    return c;
 }
 /**************************
       DATE WIDGET
@@ -1750,7 +2309,14 @@ void DateWidget::update() {
   localtime_r(&now, &ti);
 
   char dateBuf[64];
-  formatDateCustom(dateBuf, sizeof(dateBuf), ti, config.store.dateFormat);
+  uint8_t fmt = config.store.dateFormat;
+  #if (DSP_MODEL==DSP_ST7789 || DSP_MODEL==DSP_ILI9341)
+    if (fmt > 1) {
+      fmt = 0; 
+    }
+  #endif
+
+  formatDateCustom(dateBuf, sizeof(dateBuf), ti, fmt);
 
   uint8_t charWidth =
   #ifndef DSP_LCD
@@ -1799,6 +2365,7 @@ void DateWidget::update() {
 /************************
    WEATHER ICON WIDGET
  ************************/
+
 void WeatherIconWidget::init(WidgetConfig wconf, uint16_t bgcolor){
   // fgcolor itt nem kell, az ikon egy bitmap
   Widget::init(wconf, 0, bgcolor);
@@ -1862,33 +2429,19 @@ void WeatherIconWidget::_draw(){
   }
 }
 
-void WeatherIconWidget::setIcon(const char* code){
-  if (!code || !*code) return;
+void WeatherIconWidget::setIcon(const char* code) {
+  const IconSet& set = currentIconSet();
 
-  // Alapértelmezett "eradio" fallback
-  _img = eradio;
-  _iw  = 62;
-  _ih  = 40;
+  WeatherIconId id = iconIdFromCode(code);
 
-  // Azonosítás a kódrészletek alapján
-  if      (strstr(code, "01d")) { _img = img_01d; _iw = 64;  _ih = 64; }
-  else if (strstr(code, "01n")) { _img = img_01n; _iw = 64;  _ih = 64; }
-  else if (strstr(code, "02d")) { _img = img_02d; _iw = 64;  _ih = 64; }
-  else if (strstr(code, "02n")) { _img = img_02n; _iw = 64;  _ih = 64; }
-  else if (strstr(code, "03d")) { _img = img_03; _iw = 64; _ih = 64; }
-  else if (strstr(code, "03n")) { _img = img_03; _iw = 64; _ih = 64; }
-  else if (strstr(code, "04d")) { _img = img_04d;  _iw = 64; _ih = 64; }
-  else if (strstr(code, "04n")) { _img = img_04n;  _iw = 64; _ih = 64; }
-  else if (strstr(code, "09d")) { _img = img_09d;  _iw = 64;  _ih = 64; }
-  else if (strstr(code, "09n")) { _img = img_09n;  _iw = 64;  _ih = 64; }
-  else if (strstr(code, "10d")) { _img = img_10d;  _iw = 64;  _ih = 64; }
-  else if (strstr(code, "10n")) { _img = img_10n;  _iw = 64;  _ih = 64; }
-  else if (strstr(code, "11d")) { _img = img_11;  _iw = 64;  _ih = 64; }
-  else if (strstr(code, "11n")) { _img = img_11;  _iw = 64;  _ih = 64; }
-  else if (strstr(code, "13d")) { _img = img_13d;  _iw = 64;  _ih = 64; }
-  else if (strstr(code, "13n")) { _img = img_13n;  _iw = 64;  _ih = 64; }
-  else if (strstr(code, "50d")) { _img = img_50d;  _iw = 64; _ih = 64; }
-  else if (strstr(code, "50n")) { _img = img_50n;  _iw = 64; _ih = 64; }
+  if (id == WI_UNKNOWN) {
+    _img = set.fallback;
+  } else {
+    _img = set.icons[(int)id];
+  }
+
+  _iw = set.w;
+  _ih = set.h;
 
   if (_active && !_locked) {
     _clear();
@@ -1910,48 +2463,5 @@ void WeatherIconWidget::setTemp(float tempC) {
     _draw();
   }
 }
-
-
-#ifndef DSP_LCD
-void PlayListWidget::drawPlaylist(uint16_t currentItem) {
-  uint8_t lastPos = _fillPlMenu(currentItem - _plCurrentPos, _plTtemsCount);
-  if(lastPos<_plTtemsCount){
-    dsp.fillRect(0, lastPos*_plItemHeight+_plYStart, dsp.width(), dsp.height()/2, config.theme.background);
-  }
-}
-
-void PlayListWidget::_printPLitem(uint8_t pos, const char* item){
-  dsp.setTextSize(playlistConf.widget.textsize);
-  if (pos == _plCurrentPos) {
-    _current->setText(item);
-  } else {
-    uint8_t plColor = (abs(pos - _plCurrentPos)-1)>4?4:abs(pos - _plCurrentPos)-1;
-    dsp.setTextColor(config.theme.playlist[plColor], config.theme.background);
-    dsp.setCursor(TFT_FRAMEWDT, _plYStart + pos * _plItemHeight);
-    dsp.fillRect(0, _plYStart + pos * _plItemHeight - 1, dsp.width(), _plItemHeight - 2, config.theme.background);
-    dsp.print(utf8To(item, true));
-  }
-}
-#else
-void PlayListWidget::_printPLitem(uint8_t pos, const char* item){
-  if (pos == _plCurrentPos) {
-    _current->setText(item);
-  } else {
-    dsp.setCursor(1, pos);
-    char tmp[dsp.width()] = {0};
-    strlcpy(tmp, utf8To(item, true), dsp.width());
-    dsp.print(tmp);
-  }
-}
-
-void PlayListWidget::drawPlaylist(uint16_t currentItem) {
-  dsp.clear();
-  _fillPlMenu(currentItem - _plCurrentPos, _plTtemsCount);
-  dsp.setCursor(0,1);
-  dsp.write(uint8_t(126));
-}
-
-#endif
-
 
 #endif // #if DSP_MODEL!=DSP_DUMMY

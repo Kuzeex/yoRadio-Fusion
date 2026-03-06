@@ -20,7 +20,7 @@
 #else
   #define TITLE_FIX 0
 #endif
-#define bootLogoTop     110
+#define bootLogoTop     60 //110
 
 /* SROLLS  */                       /* {{ left, top, fontsize, align }, buffsize, uppercase, width, scrolldelay, scrolldelta, scrolltime } */
 const ScrollConfig metaConf   PROGMEM = {{ TFT_FRAMEWDT, 5, 4, WA_CENTER }, 140, false, MAX_WIDTH, 5000, 7, 40 };

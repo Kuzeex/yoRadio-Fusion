@@ -46,6 +46,14 @@ void printHeapFragmentationInfo(const char *title) {
 #define HEAP_INFO()
 #endif
 
+// ---- helpers ----
+static inline void copyP(char* dst, size_t dstSize, PGM_P srcP) {
+  if (!dst || dstSize == 0) return;
+  if (!srcP) { dst[0] = '\0'; return; }
+  strncpy_P(dst, srcP, dstSize - 1);
+  dst[dstSize - 1] = '\0';
+}
+
 TimeKeeper timekeeper;
 
 void _syncTask(void *pvParameters) {
@@ -79,9 +87,15 @@ bool TimeKeeper::loop0() {  // core0 (display)
     return true;
   }
   uint32_t currentTime = millis();
+  static uint32_t _last05s = 0;
   static uint32_t _last1s = 0;
   static uint32_t _last2s = 0;
   static uint32_t _last5s = 0;
+  if(currentTime - _last05s >= 500){ // 0,5 sec
+       _last05s = currentTime;
+   // Serial.printf("PM.count=%u\n", pm.count());
+       pm.on_ticker();
+  }
   if (currentTime - _last1s >= 1000) {  // 1sec
     _last1s = currentTime;
 //#ifndef DUMMYDISPLAY
@@ -125,6 +139,62 @@ bool TimeKeeper::loop1() {  // core1 (player)
     _last2s = currentTime;
   }
 
+/*----- by Andrzej Jaroszuk -----*/    
+/*----- Stops playback in internet radio mode when the playback buffer runs out. Then restarts playback. -----*/
+{
+  static uint32_t _lastStallCheck   = 0;
+  static uint32_t _stallSince       = 0;
+  static uint32_t _lastRestart      = 0;
+  static uint32_t _restartBackoffMs = 5000;
+
+  const bool stallWD = (config.store.stallWatchdog != 0);
+
+  if (!stallWD) {
+    _lastStallCheck   = currentTime;
+    _stallSince       = 0;
+    _lastRestart      = 0;
+    _restartBackoffMs = 5000;
+  } else if (currentTime - _lastStallCheck >= 1000) {
+    _lastStallCheck = currentTime;
+
+    const bool eligible =
+      player.isRunning() &&
+      (config.getMode() == PM_WEB) &&
+      (network.status == CONNECTED) &&
+      !player.lockOutput;
+
+    if (!eligible) {
+      _stallSince       = 0;
+      _restartBackoffMs = 5000;
+      return true; // csak ebből a blokkból "lépünk ki" gondolatban; a függvény megy tovább
+    }
+
+    uint32_t buf = player.inBufferFilled();
+
+    if (buf == 0) {
+      if (_stallSince == 0) _stallSince = currentTime;
+    } else {
+      _stallSince = 0;
+      _restartBackoffMs = 5000;
+    }
+
+    if (_stallSince > 0 && (currentTime - _stallSince) >= 12000) {
+      if (currentTime - _lastRestart >= _restartBackoffMs) {
+        _lastRestart = currentTime;
+        if (_restartBackoffMs < 60000) {
+          _restartBackoffMs = min<uint32_t>(_restartBackoffMs * 2, 60000);
+        }
+
+        int st = config.lastStation();
+        player.sendCommand({PR_STOP, 0});
+        if (st >= 0) player.sendCommand({PR_PLAY, st});
+
+        _stallSince = 0;
+      }
+    }
+  }
+}
+
 //#ifdef DUMMYDISPLAY
 #if defined(DUMMYDISPLAY) && !defined(USE_NEXTION)
   return true;
@@ -156,17 +226,21 @@ bool TimeKeeper::loop1() {  // core1 (player)
 }
 
 void TimeKeeper::waitAndReturnPlayer(uint8_t time_s) {
-  _returnPlayerTime = millis() + time_s * 1000;
+  _returnPlayerTime = millis() + (uint32_t)time_s * 1000;
 }
 void TimeKeeper::_returnPlayer() {
   if (_returnPlayerTime > 0 && millis() >= _returnPlayerTime) {
     _returnPlayerTime = 0;
-    #ifdef DIRECT_CHANNEL_CHANGE                            // "direct_channel_change"
-    if (display.mode() == STATIONS) {                       // zsb
-      config.lastStation(display.currentPlItem);            // zsb
-      player.sendCommand({PR_PLAY, config.lastStation()});  // zsb
-    }  // zsb
-    #endif
+if (config.store.directChannelChange) {
+  if (display.mode() == STATIONS) {
+    int st = display.currentPlItem;
+    config.lastStation(st);
+
+    // csak kérjük a PLAY-t, NEM indítjuk azonnal
+    player.pendingPlayStation = st;
+    player.pendingPlayAt = millis() + 400;   // 250ms: kijelző "lecseng"
+  }
+}
     display.putRequest(NEWMODE, PLAYER);
   }
 }
@@ -198,7 +272,6 @@ void TimeKeeper::_doAfterWait() {
   }
 }*/
 void TimeKeeper::_upClock() {
-  struct tm ti;
   time_t now = time(nullptr);
 
   #if RTCSUPPORTED
@@ -334,11 +407,31 @@ bool _getWeather() {
         NULL
       );
 
-      char httpget[250] = {0};
-      sprintf(
-        httpget, "GET /data/2.5/weather?lat=%s&lon=%s&units=%s&lang=%s&appid=%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", config.store.weatherlat,
-        config.store.weatherlon, LANG::weatherUnits, LANG::weatherLang, config.store.weatherkey, host
-      );
+char httpget[320] = {0};   // 250 néha szűk, inkább 320
+
+char unitsBuf[12];
+char langBuf[8];
+copyP(unitsBuf, sizeof(unitsBuf), (PGM_P)LANG::weatherUnits);
+copyP(langBuf,  sizeof(langBuf),  (PGM_P)LANG::weatherLang);
+
+int n = snprintf(
+  httpget, sizeof(httpget),
+  "GET /data/2.5/weather?lat=%s&lon=%s&units=%s&lang=%s&appid=%s HTTP/1.1\r\n"
+  "Host: %s\r\n"
+  "Connection: close\r\n\r\n",
+  config.store.weatherlat,
+  config.store.weatherlon,
+  unitsBuf,
+  langBuf,
+  config.store.weatherkey,
+  host
+);
+
+if (n <= 0 || (size_t)n >= sizeof(httpget)) {
+  Serial.println("##WEATHER###: httpget buffer overflow");
+  client->close(true);
+  return;
+}
       client->write(httpget);
 
       client->onData(
@@ -430,12 +523,13 @@ bool _getWeather() {
             }
  #ifdef IMPERIALUNIT
 // US Standard
-            press = press_corr * 0.02953f;         // hPa → inHg
-            wind_speed = wind_speed * 2.23694f; // m/s → mph
+
+            float press_inHg = press_corr * 0.02953f;
+            float wind_mph = wind_speed * 2.23694f; // m/s → mph
 #else
 // EU standard
-            press = (int)roundf(press_corr);   //hPa correction with Elevation
-            wind_speed = wind_speed * 3.6f; //km/h ---- original: wind_speed (m/s)
+            int press_hPa = (int)lroundf(press_corr);
+            float wind_km = wind_speed * 3.6f; //km/h ---- original: wind_speed (m/s)
 #endif
             if (!result) {
               return;
@@ -475,15 +569,74 @@ bool _getWeather() {
             Serial.printf(
               "##WEATHER###: description: %s, temp:%.1f C, pressure:%dmmHg, humidity:%d%%, wind: %d\n", desc, tempf, press, hum, (int)(wind_deg / 22.5)
             );
-#ifdef WEATHER_FMT_SHORT
-            sprintf(timekeeper.weatherBuf, LANG::weatherFmt, tempf, press, hum);  //Módisítás LANG:: hozzáírva. "weather"
-#else
-#if EXT_WEATHER
-            sprintf(timekeeper.weatherBuf, LANG::weatherFmt, desc, tempf, tempfl, press, hum, wind_speed, LANG::wind[(int)(wind_deg / 22.5)]);
-#else
-            sprintf(timekeeper.weatherBuf, LANG::weatherFmt, desc, tempf, press, hum);
-#endif
-#endif
+            uint8_t widx = (uint8_t)(wind_deg / 22.5f);
+            if (widx > 16) widx = 16;
+
+            // szélirány string kiválasztása (short / long)
+            PGM_P wdirP = (const char*)pgm_read_ptr(
+              &LANG::getWindTable()[widx]
+            );
+
+            if (config.store.shortWeather) {
+
+              // SHORT:
+              // "%d hPa \007 %d%% RH \007 %.1f km/h [%s]"
+              sprintf_P(
+                timekeeper.weatherBuf,
+                (PGM_P)LANG::getWeatherFmt(),
+              #ifdef IMPERIALUNIT
+                press_inHg,     // float
+              #else
+                press_hPa,      // int
+              #endif
+                hum,
+              #ifdef IMPERIALUNIT
+                wind_mph, 
+              #else
+                wind_km, 
+              #endif
+                wdirP
+              );
+
+            } else {
+
+              // LONG:
+            #if EXT_WEATHER
+              sprintf_P(
+                timekeeper.weatherBuf,
+                (PGM_P)LANG::getWeatherFmt(),
+                desc,
+                tempf,
+                tempfl,
+              #ifdef IMPERIALUNIT
+                press_inHg,     // float
+              #else
+                press_hPa,      // int
+              #endif
+                hum,
+              #ifdef IMPERIALUNIT
+                wind_mph, 
+              #else
+                wind_km, 
+              #endif
+                wdirP
+              );
+            #else
+              sprintf_P(
+                timekeeper.weatherBuf,
+                (PGM_P)LANG::getWeatherFmt(),
+               desc,
+                tempf,
+              #ifdef IMPERIALUNIT
+                press_inHg,     // float
+              #else
+                press_hPa,      // int
+              #endif
+                hum
+              );
+            #endif
+            }
+
             display.putRequest(NEWWEATHER);
           } else {
             Serial.println("##WEATHER###: weather not found !");

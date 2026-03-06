@@ -320,19 +320,6 @@ webserver.on("/get", HTTP_GET, [](AsyncWebServerRequest *request){
      true;
     #endif
 
-    auto barsByLy = [&](uint8_t L)->uint8_t {
-      switch(L){ case 1: return s.vuBarCountStr; case 2: return s.vuBarCountBbx; case 3: return s.vuBarCountStd; default: return s.vuBarCountDef; }
-    };
-    auto heightByLy = [&](uint8_t L)->uint8_t {
-      switch(L){ case 1: return s.vuBarHeightStr;   case 2: return s.vuBarHeightBbx;   case 3: return s.vuBarHeightStd;   default: return s.vuBarHeightDef; }
-    };
-    auto gapByLy = [&](uint8_t L)->uint8_t {
-      switch(L){ case 1: return s.vuBarGapStr;   case 2: return s.vuBarGapBbx;   case 3: return s.vuBarGapStd;   default: return s.vuBarGapDef; }
-    };
-    auto fadeByLy = [&](uint8_t L)->uint8_t {
-      switch(L){ case 1: return s.vuFadeSpeedStr;   case 2: return s.vuFadeSpeedBbx;   case 3: return s.vuFadeSpeedStd;   default: return s.vuFadeSpeedDef; }
-    };
-
     String json = "{";
     json += "\"enabled\":" + String(s.vumeter ? 1 : 0) + ",";
     json += "\"layout\":"  + String(ly) + ",";
@@ -358,6 +345,9 @@ webserver.on("/get", HTTP_GET, [](AsyncWebServerRequest *request){
     json += "\"midPct\":"  + String((int)REF_BY_LAYOUT(config.store, vuMidPct,  ly)) + ",";
     json += "\"highPct\":" + String((int)REF_BY_LAYOUT(config.store, vuHighPct, ly)) + ",";
     json += "\"dateFormat\":" + String(config.store.dateFormat) + ",";
+    json += "\"labelBgColor\":" + String(s.vuLabelBgColor) + ",";
+    json += "\"labelTextColor\":" + String(s.vuLabelTextColor) + ",";
+    json += "\"labelHeight\":"    + String((int)REF_BY_LAYOUT(config.store, vuLabelHeight, ly)) + ",";
     json += "\"peakColor\":" + String(s.vuPeakColor);
     json += "}";
     request->send(200, "application/json", json);
@@ -373,12 +363,23 @@ webserver.on("/get", HTTP_GET, [](AsyncWebServerRequest *request){
     json += "\"clockFont\":"  + String((int)clockfont_clamp_id(config.store.clockFontId)) + ",";
     json += "\"clockFonts\":" + String((int)clockfont_count())+ ",";
     json += "\"stationLine\":" + String(config.store.stationLine ? 1 : 0) + ",";
+    json += "\"shortWeather\":" + String(config.store.shortWeather ? 1 : 0) + ",";
+    json += "\"weatherIconSet\":" + String((int)config.store.weatherIconSet) + ",";
     json += "\"ttsenabled\":"  + String(config.store.ttsEnabled ? 1 : 0) + ",";
     json += "\"ttsduringplayback\":" + String(config.store.ttsDuringPlayback ? 1 : 0) + ",";
     json += "\"clockfontmono\":" + String(config.store.clockFontMono ? 1 : 0) + ",";
     json += "\"metaStNameSkip\":"  + String(config.store.metaStNameSkip ? 1 : 0) + ",";
+    json += "\"directChannelChange\":"  + String(config.store.directChannelChange ? 1 : 0) + ",";
+    json += "\"hours12\":"  + String(config.store.hours12 ? 1 : 0) + ",";
+    json += "\"monoTheme\":"  + String(config.store.monoTheme ? 1 : 0) + ",";
     json += "\"ttsinterval\":" + String((int)config.store.ttsInterval) + ",";
+    json += "\"stationsListReturnTime\":" + String((int)config.store.stationsListReturnTime) + ",";
     json += "\"grndHeight\":" + String(config.store.grndHeight) + ",";
+    json += "\"blDimEnable\":"  + String(config.store.blDimEnable ? 1 : 0) + ",";
+    json += "\"blDimLevel\":" + String((int)config.store.blDimLevel) + ",";
+    json += "\"blDimInterval\":" + String((int)config.store.blDimInterval) + ",";
+    json += "\"playlistMode\":"  + String(config.store.playlistMode ? 1 : 0) + ",";
+    json += "\"stallWatchdog\":"  + String(config.store.stallWatchdog ? 1 : 0) + ",";
     json += "\"pressureSlope_x1000\":" + String(config.store.pressureSlope_x1000) + ",";
     json += "\"ttsdndstart\":\"" + String(config.store.ttsDndStart) + "\",";
     json += "\"ttsdndstop\":\""  + String(config.store.ttsDndStop)  + "\"";
@@ -558,9 +559,9 @@ void NetServer::processQueue(){
             if (BRIGHTNESS_PIN != 255 || nxtn || dbgact)        APPEND_GROUP("group_brightness");
             if (DSP_CAN_FLIPPED || dbgact)                      APPEND_GROUP("group_tft");
             if (TS_MODEL != TS_MODEL_UNDEFINED || dbgact)       APPEND_GROUP("group_touch");
-            if (DSP_MODEL == DSP_NOKIA5110)                     APPEND_GROUP("group_nokia");
+            if (DSP_MODEL == DSP_NOKIA5110)                     {APPEND_GROUP("group_nokia");}
                                                                 APPEND_GROUP("group_timezone");
-            if (SHOW_WEATHER || dbgact)                         APPEND_GROUP("group_weather");
+            if (SHOW_WEATHER || dbgact)                         {APPEND_GROUP("group_weather");}
                                                                 APPEND_GROUP("group_timer");    /* ----- Auto On-Off Timer ----- */
                                                                 APPEND_GROUP("group_controls");
             if (ENC_BTNL != 255 || ENC2_BTNL != 255 || dbgact)  APPEND_GROUP("group_encoder");
@@ -597,7 +598,7 @@ void NetServer::processQueue(){
                                   config.store.audioinfo, 
                                   config.store.vumeter, 
                                   config.store.softapdelay,
-                                  config.vuThreshold,
+                                  config.vuRefLevel,
                                   config.store.mdnsname,
                                   config.ipToStr(WiFi.localIP()),
                                   config.store.abuff,

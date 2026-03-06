@@ -2,6 +2,7 @@
 #include "core/options.h"
 #include "core/config.h"
 #include "pluginsManager/pluginsManager.h"
+#include "plugins/backlight/backlight.h" // backlight plugin
 #include "core/telnet.h"
 #include "core/player.h"
 #include "core/display.h"
@@ -18,6 +19,7 @@
 #include "core/audiohandlers.h"
 #ifdef USE_DLNA //DLNA mod
 #include "network/dlna_service.h"
+extern volatile bool g_dlnaPlaylistDirty;
 #endif
 
 #if USE_OTA
@@ -34,6 +36,7 @@ SPIClass  SPI2(HSPI);
 #endif
 
 extern __attribute__((weak)) void yoradio_on_setup();
+extern void backlightPluginInit();
 
 #if USE_OTA
 void setupOTA(){
@@ -75,8 +78,12 @@ void setupOTA(){
 
 void setup() {
   Serial.begin(115200);
+#if (BRIGHTNESS_PIN!=255)
+  backlightPluginInit();
+#endif
   if(REAL_LEDBUILTIN!=255) pinMode(REAL_LEDBUILTIN, OUTPUT);
   if (yoradio_on_setup) yoradio_on_setup();
+  pm.init();     // pluginsManager
   pm.on_setup();
   config.init();
   clock_tts_setup();
@@ -116,6 +123,34 @@ void setup() {
 void loop() {
   timekeeper.loop1();
   telnet.loop();
+#ifdef USE_DLNA
+  // DLNA build/append után runtime playlist refresh (main contextben!)
+  static uint32_t dlnaReloadAt = 0;
+
+  if (g_dlnaPlaylistDirty) {
+    g_dlnaPlaylistDirty = false;
+    dlnaReloadAt = millis() + 150; // kis debounce/flush idő SPIFFS rename után
+  }
+
+  if (dlnaReloadAt && (int32_t)(millis() - dlnaReloadAt) >= 0) {
+    dlnaReloadAt = 0;
+
+    // újratölti a playlist/index cache-t → playlistLength() innentől már nem 0
+    config.indexDLNAPlaylist();
+
+    // WebUI/index frissítés
+    netserver.resetQueue();
+    netserver.requestOnChange(GETINDEX, 0);
+
+    // ha épp DLNA nézetben vagy, frissítsd a képernyőt is
+    if (config.getMode() == PM_WEB &&
+        config.store.playlistSource == (uint8_t)PL_SRC_DLNA) {
+      display.resetQueue();
+      display.putRequest(NEWMODE, PLAYER);
+      display.putRequest(NEWSTATION);
+    }
+  }
+#endif
   if (network.status == CONNECTED || network.status==SDREADY) {
     player.loop();
 #if USE_OTA

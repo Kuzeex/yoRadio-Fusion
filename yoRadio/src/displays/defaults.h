@@ -77,6 +77,11 @@
   #define VU_DEF_HIGH_PCT_BBX 80
   #define VU_DEF_HIGH_PCT_STD 80
 
+// Label heights
+  #define VU_DEF_LHGT_DEF 18
+  #define VU_DEF_LHGT_STR 22
+  #define VU_DEF_LHGT_BBX 22
+  #define VU_DEF_LHGT_STD 30
 // --------------------------------------------------------------------------------------320x240
 #elif DSP_MODEL==DSP_ST7789 || DSP_MODEL==DSP_ILI9341
   #define VU_DEF_HGT_DEF  35
@@ -121,20 +126,20 @@
 
 // Dymanics
   #define VU_DEF_EXPO_DEF   50  // 0.40
-  #define VU_DEF_EXPO_STR  140  // 0.25
-  #define VU_DEF_EXPO_BBX  140  // 0.25
+  #define VU_DEF_EXPO_STR  130  // 0.25
+  #define VU_DEF_EXPO_BBX  130  // 0.25
   #define VU_DEF_EXPO_STD  130  // 0.10
-  #define VU_DEF_FLOOR_DEF  95  // 0.40
-  #define VU_DEF_FLOOR_STR  82  // 0.25
-  #define VU_DEF_FLOOR_BBX  82  // 0.25
+  #define VU_DEF_FLOOR_DEF  70  // 0.40
+  #define VU_DEF_FLOOR_STR  90  // 0.25
+  #define VU_DEF_FLOOR_BBX  90  // 0.25
   #define VU_DEF_FLOOR_STD  20  // 0.10
   #define VU_DEF_CEIL_DEF  100  // 0.40
-  #define VU_DEF_CEIL_STR  100  // 0.25
-  #define VU_DEF_CEIL_BBX  100  // 0.25
+  #define VU_DEF_CEIL_STR   95  // 0.25
+  #define VU_DEF_CEIL_BBX   95  // 0.25
   #define VU_DEF_CEIL_STD  100  // 0.10
-  #define VU_DEF_GAIN_DEF   86  // 0.40
-  #define VU_DEF_GAIN_STR  195  // 0.25
-  #define VU_DEF_GAIN_BBX  195  // 0.25
+  #define VU_DEF_GAIN_DEF   90  // 0.40
+  #define VU_DEF_GAIN_STR  110  // 0.25
+  #define VU_DEF_GAIN_BBX  110  // 0.25
   #define VU_DEF_GAIN_STD   90  // 0.10
   #define VU_DEF_KNEE_DEF   10  // 0.40
   #define VU_DEF_KNEE_STR    5  // 0.25
@@ -152,6 +157,11 @@
   #define VU_DEF_HIGH_PCT_BBX 80
   #define VU_DEF_HIGH_PCT_STD 80
 
+// Label heights
+  #define VU_DEF_LHGT_DEF 15
+  #define VU_DEF_LHGT_STR 20
+  #define VU_DEF_LHGT_BBX 20
+  #define VU_DEF_LHGT_STD 30
 // --------------------------------------------------------------------------------------480x320
 #elif DSP_MODEL==DSP_ILI9488 || DSP_MODEL==DSP_ILI9486 || DSP_MODEL==DSP_ST7796
   #define VU_DEF_HGT_DEF  37
@@ -227,6 +237,11 @@
   #define VU_DEF_HIGH_PCT_BBX 80
   #define VU_DEF_HIGH_PCT_STD 80
 
+// Label heights
+  #define VU_DEF_LHGT_DEF 18
+  #define VU_DEF_LHGT_STR 22
+  #define VU_DEF_LHGT_BBX 22
+  #define VU_DEF_LHGT_STD 30
 // --------------------------------------------------------------------------------------480x272
 #elif DSP_MODEL==DSP_NV3041A
   #define VU_DEF_HGT_DEF  37
@@ -301,6 +316,12 @@
   #define VU_DEF_HIGH_PCT_STR 80
   #define VU_DEF_HIGH_PCT_BBX 80
   #define VU_DEF_HIGH_PCT_STD 80
+
+// Label heights
+  #define VU_DEF_LHGT_DEF 18
+  #define VU_DEF_LHGT_STR 22
+  #define VU_DEF_LHGT_BBX 22
+  #define VU_DEF_LHGT_STD 30
 // --------------------------------------------------------------------------------------320x170
 #elif DSP_MODEL==DSP_ST7789_170
   #define VU_DEF_HGT_DEF  35
@@ -375,6 +396,12 @@
   #define VU_DEF_HIGH_PCT_STR 80
   #define VU_DEF_HIGH_PCT_BBX 80
   #define VU_DEF_HIGH_PCT_STD 80
+
+// Label heights
+  #define VU_DEF_LHGT_DEF 10
+  #define VU_DEF_LHGT_STR 15
+  #define VU_DEF_LHGT_BBX 15
+  #define VU_DEF_LHGT_STD 25
 // --------------------------------------------------------------------------------------284x76
 #elif DSP_MODEL==DSP_ST7789_76
   #define VU_DEF_HGT_DEF  7
@@ -449,6 +476,12 @@
   #define VU_DEF_HIGH_PCT_STR 80
   #define VU_DEF_HIGH_PCT_BBX 80
   #define VU_DEF_HIGH_PCT_STD 80
+
+// Label heights
+  #define VU_DEF_LHGT_DEF 18
+  #define VU_DEF_LHGT_STR 20
+  #define VU_DEF_LHGT_BBX 20
+  #define VU_DEF_LHGT_STD 15
 // --------------------------------------------------------------------------------------160x128
 #elif DSP_MODEL==DSP_ST7735
   #define VU_DEF_HGT_DEF  20
@@ -523,6 +556,12 @@
   #define VU_DEF_HIGH_PCT_STR 80
   #define VU_DEF_HIGH_PCT_BBX 80
   #define VU_DEF_HIGH_PCT_STD 80
+
+// Label heights
+  #define VU_DEF_LHGT_DEF 10
+  #define VU_DEF_LHGT_STR 11
+  #define VU_DEF_LHGT_BBX 11
+  #define VU_DEF_LHGT_STD 12
 // Fallback
 #else
   #define VU_DEF_BARS_DEF 32

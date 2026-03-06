@@ -4,8 +4,8 @@
 #include "Arduino.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
-#include "fonts/bootlogo99x64.h"
-#include "fonts/dsfont52.h"
+#include "fonts/bootlogo_cust128.h" //bootlogo99x64.h
+#include "fonts/dsfont35.h"
 
 typedef GFXcanvas16 Canvas;
 typedef Adafruit_ILI9341 yoDisplay;

@@ -11,7 +11,7 @@
   #define PLQ_SEND_DELAY pdMS_TO_TICKS(1000) //portMAX_DELAY
 #endif
 
-enum playerRequestType_e : uint8_t { PR_PLAY = 1, PR_STOP = 2, PR_PREV = 3, PR_NEXT = 4, PR_VOL = 5, PR_CHECKSD = 6, PR_VUTONUS = 7, PR_BURL = 8, PR_TOGGLE = 9 };
+enum playerRequestType_e : uint8_t { PR_PLAY = 1, PR_STOP = 2, PR_PREV = 3, PR_NEXT = 4, PR_VOL = 5, PR_CHECKSD = 6, PR_VUTONUS = 7, PR_BURL = 8, PR_TOGGLE = 9, PR_SWITCH_PLAYLIST = 10 }; //DLNA mod
 struct playerRequestParams_t
 {
   playerRequestType_e type;
@@ -41,6 +41,8 @@ class Player: public Audio {
     char      burl[MQTT_BURL_SIZE];  /* buffer for browseUrl  */
     #endif
   public:
+    volatile int16_t pendingPlayStation;
+    volatile uint32_t pendingPlayAt;
     Player();
     void init();
     void loop();
@@ -65,6 +67,9 @@ class Player: public Audio {
     void stopInfo();
     void setOutputPins(bool isPlaying);
     void setResumeFilePos(uint32_t pos) { _resumeFilePos = pos; }
+    #ifdef USE_DLNA
+    void switchToWebPlaylist();  // Switch from DLNA back to web playlist
+    #endif
 };
 
 extern Player player;

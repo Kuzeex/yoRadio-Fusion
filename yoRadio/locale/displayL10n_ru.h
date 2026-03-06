@@ -35,27 +35,70 @@ const char octt[] PROGMEM = "октября";
 const char nov[] PROGMEM = "ноября";
 const char decc[] PROGMEM = "декабря";
 
-const char wn_N[]      PROGMEM = "СЕВ";
-const char wn_NNE[]    PROGMEM = "ССВ";
-const char wn_NE[]     PROGMEM = "СВ";
-const char wn_ENE[]    PROGMEM = "ВСВ";
-const char wn_E[]      PROGMEM = "ВОСТ";
-const char wn_ESE[]    PROGMEM = "ВЮВ";
-const char wn_SE[]     PROGMEM = "ЮВ";
-const char wn_SSE[]    PROGMEM = "ЮЮВ";
-const char wn_S[]      PROGMEM = "ЮЖ";
-const char wn_SSW[]    PROGMEM = "ЮЮЗ";
-const char wn_SW[]     PROGMEM = "ЮЗ";
-const char wn_WSW[]    PROGMEM = "ЗЮЗ";
-const char wn_W[]      PROGMEM = "ЗАП";
-const char wn_WNW[]    PROGMEM = "ЗСЗ";
-const char wn_NW[]     PROGMEM = "СЗ";
-const char wn_NNW[]    PROGMEM = "ССЗ";
+// ============================================================
+// WIND DIRECTIONS – SHORT
+// ============================================================
+const char wn_N_s[]      PROGMEM = "СЕВ";
+const char wn_NNE_s[]    PROGMEM = "ССВ";
+const char wn_NE_s[]     PROGMEM = "СВ";
+const char wn_ENE_s[]    PROGMEM = "ВСВ";
+const char wn_E_s[]      PROGMEM = "ВОСТ";
+const char wn_ESE_s[]    PROGMEM = "ВЮВ";
+const char wn_SE_s[]     PROGMEM = "ЮВ";
+const char wn_SSE_s[]    PROGMEM = "ЮЮВ";
+const char wn_S_s[]      PROGMEM = "ЮЖ";
+const char wn_SSW_s[]    PROGMEM = "ЮЮЗ";
+const char wn_SW_s[]     PROGMEM = "ЮЗ";
+const char wn_WSW_s[]    PROGMEM = "ЗЮЗ";
+const char wn_W_s[]      PROGMEM = "ЗАП";
+const char wn_WNW_s[]    PROGMEM = "ЗСЗ";
+const char wn_NW_s[]     PROGMEM = "СЗ";
+const char wn_NNW_s[]    PROGMEM = "ССЗ";
+
+const char *const wind_short[] PROGMEM = {
+  wn_N_s, wn_NNE_s, wn_NE_s, wn_ENE_s,
+  wn_E_s, wn_ESE_s, wn_SE_s, wn_SSE_s,
+  wn_S_s, wn_SSW_s, wn_SW_s, wn_WSW_s,
+  wn_W_s, wn_WNW_s, wn_NW_s, wn_NNW_s, wn_N_s
+};
+
+// ============================================================
+// WIND DIRECTIONS – LONG
+// ============================================================
+const char wn_N_l[]   PROGMEM = "северный";
+const char wn_NNE_l[] PROGMEM = "северо-северо-восточный";
+const char wn_NE_l[]  PROGMEM = "северо-восточный";
+const char wn_ENE_l[] PROGMEM = "восточно-северо-восточный";
+const char wn_E_l[]   PROGMEM = "восточный";
+const char wn_ESE_l[] PROGMEM = "восточно-юго-восточный";
+const char wn_SE_l[]  PROGMEM = "юго-восточный";
+const char wn_SSE_l[] PROGMEM = "юго-юго-восточный";
+const char wn_S_l[]   PROGMEM = "южный";
+const char wn_SSW_l[] PROGMEM = "юго-юго-западный";
+const char wn_SW_l[]  PROGMEM = "юго-западный";
+const char wn_WSW_l[] PROGMEM = "западно-юго-западный";
+const char wn_W_l[]   PROGMEM = "западный";
+const char wn_WNW_l[] PROGMEM = "западно-северо-западный";
+const char wn_NW_l[]  PROGMEM = "северо-западный";
+const char wn_NNW_l[] PROGMEM = "северо-северо-западный";
+
+const char *const wind_long[] PROGMEM = {
+  wn_N_l, wn_NNE_l, wn_NE_l, wn_ENE_l,
+  wn_E_l, wn_ESE_l, wn_SE_l, wn_SSE_l,
+  wn_S_l, wn_SSW_l, wn_SW_l, wn_WSW_l,
+  wn_W_l, wn_WNW_l, wn_NW_l, wn_NNW_l, wn_N_l
+};
+
+// ============================================================
+// WIND TABLE SELECTOR
+// ============================================================
+static inline const char *const *getWindTable() {
+  return config.store.shortWeather ? wind_short : wind_long;
+}
 
 const char* const dow[]     PROGMEM = { sun, mon, tue, wed, thu, fri, sat };
 const char* const dowf[]    PROGMEM = { sunf, monf, tuef, wedf, thuf, frif, satf };
 const char* const mnths[]   PROGMEM = { jan, feb, mar, apr, may, jun, jul, aug, sep, octt, nov, decc };
-const char* const wind[]    PROGMEM = { wn_N, wn_NNE, wn_NE, wn_ENE, wn_E, wn_ESE, wn_SE, wn_SSE, wn_S, wn_SSW, wn_SW, wn_WSW, wn_W, wn_WNW, wn_NW, wn_NNW, wn_N };
 
 const char    const_PlReady[]    PROGMEM = "[готов]";
 const char  const_PlStopped[]    PROGMEM = "[остановлено]";
@@ -72,15 +115,28 @@ const char        apPassTxt[]    PROGMEM = "ПАРОЛЬ";
 const char       bootstrFmt[]    PROGMEM = "Соединяюсь с %s";
 const char        apSettFmt[]    PROGMEM = "НАСТРОЙКИ: HTTP://%s/";
 
-#ifdef WEATHER_FMT_SHORT // Módosítás
-const char weatherFmt[] PROGMEM = "%.1f\011C  \007  %d hPa  \007  %d%% RH";
+#if (DSP_MODEL == DSP_ILI9341) || (DSP_MODEL == DSP_ST7735) || (DSP_MODEL == DSP_ST7789) || (DSP_MODEL == DSP_ST7789_76)
+const char weatherFmtShort[] PROGMEM =
+  "%d гПа %d%% RH %.1f км/год";
+#elif (DSP_MODEL == DSP_ST7789_240)
+  "%d гПа %d%% RH";
 #else
+const char weatherFmtShort[] PROGMEM =
+  "%d гПа \007 %d%% RH \007 %.1f км/год [%s]";
+#endif
+
 #if EXT_WEATHER
-const char       weatherFmt[]    PROGMEM = "%s, %.1f\011C \007 ощущается: %.1f\011C \007 давление: %d гПа \007 влажность: %d%% \007 ветер: %.1f км/год [%s]";
+const char weatherFmtLong[] PROGMEM =
+  "%s, %.1f\011C \007 ощущается: %.1f\011C \007 давление: %d гПа \007 влажность: %d%% \007 ветер: %.1f км/год [%s]";
 #else
-const char       weatherFmt[]    PROGMEM = "%s, %.1f\011C \007 давление: %d hPa \007 влажность: %d%%";
+const char weatherFmtLong[] PROGMEM =
+  "%s, %.1f\011C \007 давление: %d гПа \007 влажность: %d%%";
 #endif
-#endif
+
+static inline const char* getWeatherFmt() {
+  return config.store.shortWeather ? weatherFmtShort : weatherFmtLong;
+}
+
 const char     weatherUnits[]    PROGMEM = "metric";   /* standard, metric, imperial */
 const char      weatherLang[]    PROGMEM = "ru";       /* https://openweathermap.org/current#multi */
 

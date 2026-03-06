@@ -169,6 +169,10 @@ class VuWidget: public Widget {
     uint8_t _peakFallDelayCounter;     
     const uint8_t _peakFallDelay = 2;  
     uint16_t _maxDimension;
+    uint8_t _labelSize = 18;
+    void _drawLabelsVertical(int x, int y, int w, int labelSize);
+    void _drawLabelsHorizontal(int x, int y, int h, int labelSize);
+    void _drawSingleLabel(int x, int y, int h, char ch, int labelSize);
 
   protected:
     #if !defined(DSP_LCD) && !defined(DSP_OLED)
@@ -277,7 +281,6 @@ class BitrateWidget: public Widget {
     void _clear();
     void _charSize(uint8_t textsize, uint8_t& width, uint16_t& height);
 };
-
 class PlayListWidget: public Widget {
   public:
     using Widget::init;
@@ -285,18 +288,37 @@ class PlayListWidget: public Widget {
     void drawPlaylist(uint16_t currentItem);
     inline uint16_t itemHeight(){ return _plItemHeight; }
     inline uint16_t currentTop(){ return _plYStart+_plCurrentPos*_plItemHeight; }
+
   private:
     ScrollWidget* _current;
+
     uint16_t _plItemHeight, _plTtemsCount, _plCurrentPos;
-    int _plYStart;
+    int      _plYStart;
+
+    // ===== Moving cursor cache =====
+    static const uint8_t MAX_PL_PAGE_ITEMS = 15;
+    String   _plCache[MAX_PL_PAGE_ITEMS];
+    int16_t  _plLoadedPage = -1;
+    int16_t  _plLastGlobalPos = -1;
+    uint32_t _plLastDrawTime = 0;
+
+    // ===== common =====
     uint8_t _fillPlMenu(int from, uint8_t count);
-    void _printPLitem(uint8_t pos, const char* item);
-    
+
+    // Két külön kirajzoló ág
+    void _drawMovingCursor(uint16_t currentItem);
+    void _drawScrollCenter(uint16_t currentItem);
+
+    void _printMoving(uint8_t pos, const char* item);
+    void _printScroll(uint8_t pos, const char* item);
+
+    void _loadPlaylistPage(int pageIndex, int itemsPerPage);
 };
 
 class DateWidget : public ScrollWidget {
 public:
-  using ScrollWidget::ScrollWidget;
+  //using ScrollWidget::ScrollWidget;
+  using ScrollWidget::init;
 
   void init(ScrollConfig conf, uint16_t fg, uint16_t bg) {
     ScrollWidget::init("\007", conf, fg, bg);

@@ -6,6 +6,7 @@
 #include "controls.h"
 #include "display.h"
 #include "player.h"
+#include "../plugins/backlight/backlight.h"
 
 #ifndef TS_X_MIN
   #define TS_X_MIN              400
@@ -27,16 +28,41 @@
   #ifdef TS_SPIPINS
     SPIClass  TSSPI(HSPI);
   #endif
-  #include <XPT2046_Touchscreen.h>
+  #include "../Touch/XPT2046/XPT2046_Touchscreen.h"
   XPT2046_Touchscreen ts(TS_CS);
   typedef TS_Point TSPoint;
 #elif TS_MODEL==TS_MODEL_GT911
-  #include "../GT911_Touchscreen/TAMC_GT911.h"
+  #include "../Touch/GT911/TAMC_GT911.h"
   TAMC_GT911 ts = TAMC_GT911(TS_SDA, TS_SCL, TS_INT, TS_RST, 0, 0);
   typedef TP_Point TSPoint;
 #elif TS_MODEL==TS_MODEL_CST816
-  #include "touchscreen_cst816.h"
+  #include "../Touch/CST816/touchscreen_cst816.h"
   typedef TP_Point TSPoint;
+#elif TS_MODEL == TS_MODEL_FT6X36
+   #include "../Touch/FT6X36/FT6X36.h"
+// Global Wire objektum I2C config.cpp --> Wire.begin(TS_SDA, TS_SCL)
+FT6X36 ts(&Wire, TS_INT);
+// A későbbi kódhoz egységes típusnév
+typedef TPoint           TSPoint;
+static volatile bool     g_ftTouched = false;
+static volatile uint16_t g_ftX = 0;
+static volatile uint16_t g_ftY = 0;
+static volatile uint32_t g_ftLastMs = 0;
+
+static void ft6x36TouchHandler(TPoint point, TEvent e) {
+    // Események: TouchStart, TouchMove, TouchEnd, Tap, Drag...
+    if (e == TEvent::TouchStart || e == TEvent::TouchMove || e == TEvent::DragMove || e == TEvent::DragStart) {
+        g_ftX = point.x;
+        g_ftY = point.y;
+        g_ftTouched = true;
+        g_ftLastMs = millis();
+    } else if (e == TEvent::TouchEnd || e == TEvent::DragEnd || e == TEvent::Tap) {
+        g_ftX = point.x;
+        g_ftY = point.y;
+        g_ftTouched = false;
+        g_ftLastMs = millis();
+    }
+}
 #endif
 
 void TouchScreen::init(uint16_t w, uint16_t h){
@@ -61,6 +87,15 @@ void TouchScreen::init(uint16_t w, uint16_t h){
   ts.begin();
   ts.setRotation(config.store.fliptouch?1:3);
 #endif
+    #if TS_MODEL == TS_MODEL_FT6X36
+    bool ok = ts.begin(FT6X36_DEFAULT_THRESHOLD);
+    if (ok) {
+        Serial.println("[TOUCH] FT6X36 init OK");
+    } else {
+        Serial.println("[TOUCH] FT6X36 init FAILED (nincs IC / I2C hiba)");
+    }
+    ts.registerTouchHandler(ft6x36TouchHandler);
+    #endif
   _width  = w;
   _height = h;
 #if TS_MODEL==TS_MODEL_GT911
@@ -129,6 +164,24 @@ bool istouched = _istouched();
     TSPoint p = ts.points[0];
     touchX = p.x;
     touchY = p.y;
+  #elif TS_MODEL == TS_MODEL_FT6X36
+        uint16_t rawX = g_ftX;
+        uint16_t rawY = g_ftY;
+        // Serial.printf("touchscreen.cpp--> nyers X: %d, nyers Y: %d, store.fliptouch: %d\n", rawX, rawY, config.store.fliptouch);
+        if (config.store.fliptouch) { // 180 fokos tükrözés
+            touchX = (_width - 1) - rawY;
+            touchY = rawX;
+        } else { // Alap helyzet
+            touchX = rawY;
+            touchY = (_height - 1) - rawX;
+        }
+        #ifdef X_TOUCH_MIRRORING
+        touchX = (_width - 1) - touchX;
+        #endif
+        #ifdef Y_TOUCH_MIRRORING
+        touchY = (_height - 1) - touchY;
+        #endif
+            // Serial.printf("touchscreen.cpp--> touch X: %d, touch Y: %d\n", touchX, touchY);
   #endif
   if (!wastouched) { /*     START TOUCH     */
       _oldTouchX = touchX;
@@ -179,9 +232,28 @@ bool istouched = _istouched();
   }else{
     if (wastouched) {/*     END TOUCH     */
       if (direct == TDS_REQUEST) {
-        uint32_t pressTicks = millis()-touchLongPress;
-        if( pressTicks < BTN_PRESS_TICKS*2){
-          if(pressTicks > 50) onBtnClick(EVT_BTNCENTER);
+                uint32_t pressTicks = millis() - touchLongPress;
+                if (pressTicks < BTN_PRESS_TICKS * 2) { // (1000 ms stations)
+                    if (pressTicks > 50) { 
+                      if (config.store.blDimEnable) {
+                        bool dimmed = backlightPlugin.isDimmed();
+                        bool fading = backlightPlugin.isFading();
+                        bool justWoke = backlightPlugin.justWoke();
+                        if (dimmed || fading) {
+                           // Serial.println("touchscreen.cpp--> WAKE ONLY");
+                            touchLongPress = millis();
+                            backlightPlugin.wake();
+                            return;
+                        }
+                        backlightPlugin.activity();
+                        if (justWoke) {
+                            //Serial.println("touchscreen.cpp--> SWALLOW AFTER WAKE");
+                            return;
+                        }
+                     }
+                        //Serial.println("touchscreen.cpp--> NORMAL CLICK");
+                        onBtnClick(EVT_BTNCENTER);
+                    }
         }else{
           display.putRequest(NEWMODE, display.mode() == PLAYER ? STATIONS : PLAYER);
         }
@@ -208,6 +280,11 @@ bool TouchScreen::_istouched(){
   return ts.isTouched;
 #elif TS_MODEL==TS_MODEL_CST816
   return ts.isTouched;
+#elif TS_MODEL == TS_MODEL_FT6X36
+    // “touched”-nek tekintjük, ha a handler szerint érintve van,
+    // vagy ha nagyon friss esemény volt (kis hiszterézis).
+    if (g_ftTouched) return true;
+    return ((uint32_t)(millis() - g_ftLastMs) < 50);
 #endif
 }
 

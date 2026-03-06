@@ -47,19 +47,18 @@
   #define ESP_ARDUINO_3 1
 #endif
 
-#define CONFIG_VERSION  7
+#define CONFIG_VERSION  12
 
 enum playMode_e : uint8_t {  //DLNA mod
   PM_WEB    = 0,
   PM_SDCARD = 1,
 };
 
-#ifdef USE_DLNA
+
 enum PlaylistSource : uint8_t {
   PL_SRC_WEB  = 0,
   PL_SRC_DLNA = 1
 };
-#endif
 
 void u8fix(char *src);
 
@@ -159,6 +158,17 @@ struct config_t
   uint8_t   showNameday;
   uint8_t   clockFontId;
   bool      stationLine;  // 0 = default, 1 = line
+  bool      shortWeather;  // 0 = default, 1 = short
+  uint8_t   monoTheme;   // 0 = normal, 1 = mono style
+  uint8_t   blDimEnable;
+  uint8_t   blDimLevel;  // Down level (min fényerő) százalékban
+  uint16_t  blDimInterval;  // Down interval (inaktivitás idő)
+  uint16_t  vuLabelBgColor;   // label háttér
+  uint16_t  vuLabelTextColor; // L/R betű
+  uint8_t   vuLabelHeightDef, vuLabelHeightStr, vuLabelHeightBbx, vuLabelHeightStd;   // label magasság
+  uint8_t   weatherIconSet;
+  uint8_t   playlistMode;
+  uint8_t   stallWatchdog;
   bool      fliptouch;
   bool      dbgtouch;
   bool      dspon;
@@ -201,23 +211,24 @@ struct config_t
   char      autoStartTime[8]; /* ----- Auto On-Off Timer --format: "HH:MM--- */
   char      autoStopTime[8];  /* ----- Auto On-Off Timer --format: "HH:MM--- */
   uint8_t   ttsEnabled;          // 0/1
-  uint8_t   ttsInterval;  // 15..120
+  uint8_t   ttsInterval;  // 15..240
   char      ttsDndStart[8]; 
   char      ttsDndStop[8]; 
   bool      ttsDuringPlayback;
   bool      clockFontMono;
   uint8_t   metaStNameSkip;
+  uint8_t   directChannelChange;        // 0/1
+  uint8_t   stationsListReturnTime;     // 2..30 sec
+  uint8_t   hours12;        // 0/1
   uint16_t  abuff;
   bool      telnet;
   bool      watchdog;
   uint16_t  timeSyncInterval;
   uint16_t  timeSyncIntervalRTC;
   uint16_t  weatherSyncInterval;
-#ifdef USE_DLNA   // DLNA mod
-  uint8_t playlistSource; 
-  void indexDLNAPlaylist();
-  uint8_t lastPlayedSource;
-#endif
+  uint8_t   playlistSource; 
+  uint8_t   lastPlayedSource;
+  uint8_t   _future_reserved[2];
 };
 
 #if IR_PIN!=255
@@ -280,7 +291,7 @@ class Config {
     uint32_t sdResumePos;
     uint16_t stopedSdStationId = -1; // "módosítás" új változó a player.stop ad neki értéket.
     bool     emptyFS;
-    uint16_t vuThreshold;
+    uint16_t vuRefLevel;
     uint16_t screensaverTicks;
     uint16_t screensaverPlayingTicks;
     bool     isScreensaver;
@@ -330,6 +341,7 @@ class Config {
 #endif
     void initSDPlaylist();
     void changeMode(int newmode=-1);
+    void toggleMode(); //DLNA mod
     uint16_t playlistLength();
     uint16_t lastStation(){
 #ifdef USE_SD
@@ -360,6 +372,7 @@ class Config {
     void setTimezoneOffset(uint16_t tzo);
     uint16_t getTimezoneOffset();
     void setBrightness(bool dosave=false);
+    void setBrightnessRaw(uint8_t percent);
     void setDspOn(bool dspon, bool saveval = true);
     void sleepForAfter(uint16_t sleepfor, uint16_t sleepafter=0);
     void bootInfo();

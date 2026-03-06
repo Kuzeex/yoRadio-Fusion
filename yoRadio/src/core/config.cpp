@@ -23,6 +23,10 @@
 #define DUMMYDISPLAY
 #endif
 
+#ifdef USE_DLNA
+extern volatile bool g_dlnaPlaylistDirty;
+#endif
+
 Config config;
 
 void u8fix(char *src){
@@ -54,6 +58,16 @@ bool Config::_isFSempty() {
 void Config::init() {
   EEPROM.begin(EEPROM_SIZE);
   sdResumePos = 0;
+    /*----- I2C init -----*/
+#if (RTC_MODULE == DS3231) || (TS_MODEL == TS_MODEL_FT6X36) || (TS_MODEL == TS_MODEL_GT911)
+    Wire.begin(TS_SDA, TS_SCL);
+    Wire.setClock(400000);
+    Serial.println("Scanning I2S...");
+    for (uint8_t addr = 1; addr < 127; addr++) {
+        Wire.beginTransmission(addr);
+        if (Wire.endTransmission() == 0) { Serial.printf("Found: 0x%02X\n", addr); }
+    }
+#endif
 //DLNA modplus
 #ifdef USE_DLNA 
   isBooting = true; 
@@ -88,9 +102,16 @@ void Config::init() {
   #endif
 #endif
   eepromRead(EEPROM_START, store);
-#ifdef USE_DLNA
-  if (store.lastPlayedSource == PL_SRC_DLNA) store.playlistSource = PL_SRC_DLNA;
-  else store.playlistSource = PL_SRC_WEB;
+// ---- Playlist source normalization ----
+if (store.playlistSource > PL_SRC_DLNA)
+    store.playlistSource = PL_SRC_WEB;
+
+if (store.lastPlayedSource > PL_SRC_DLNA)
+    store.lastPlayedSource = PL_SRC_WEB;
+
+#ifndef USE_DLNA
+    store.playlistSource   = PL_SRC_WEB;
+    store.lastPlayedSource = PL_SRC_WEB;
 #endif
   bootInfo(); // https://github.com/e2002/yoradio/pull/149
   if (store.config_set != 4262) {
@@ -166,74 +187,129 @@ void Config::_setupVersion(){
   saveValue(&store.version, currentVersion);
 }
 
-void Config::changeMode(int newmode){ //DLNA mod 
-#ifdef USE_SD
-  bool pir = player.isRunning();
+void Config::toggleMode() {
 
-  if (SDC_CS == 255 && newmode == PM_SDCARD) return;
-
-  if (network.status == SOFT_AP || display.mode() == LOST) {
-    saveValue(&store.play_mode, (uint8_t)PM_SDCARD);
-    delay(50);
-    ESP.restart();
-  }
-
-  /* === SD only when explicitly requested === */
-  if (newmode == PM_SDCARD) {
-    if (!sdman.ready) {
-      if (!sdman.start()) {
-        Serial.println("##[ERROR]# SD Not Found");
-        netserver.requestOnChange(GETPLAYERMODE, 0);
-        return;
-      }
-    }
-  }
-
-  /* === set mode === */
-  store.play_mode = (playMode_e)newmode;
-  saveValue(&store.play_mode, (uint8_t)store.play_mode, true, true);
-
-  /* === filesystem binding === */
-  if (getMode() == PM_SDCARD) {
-    _SDplaylistFS = &sdman;
-  } else {
-    _SDplaylistFS = &SPIFFS;  // WEB + DLNA
-  }
-
-  /* === SD specific actions === */
-  if (getMode() == PM_SDCARD) {
-    if (pir) player.sendCommand({PR_STOP, 0});
-    display.putRequest(NEWMODE, SDCHANGE);
-    delay(50);
-  } else {
-    sdman.stop();   // WEB + DLNA → SD off
-  }
-
-  if (!_bootDone) return;
-
-  initPlaylistMode();
-
-  if (pir) {
 #ifdef USE_DLNA
-    uint16_t st = (getMode() == PM_SDCARD)
-      ? store.lastSdStation
-      : (store.playlistSource == PL_SRC_DLNA
-         ? store.lastDlnaStation
-         : store.lastStation);
+
+    // --- WEB módban vagyunk ---
+    if (getMode() == PM_WEB) {
+
+        if (store.playlistSource == PL_SRC_WEB) {
+
+            // WEB → DLNA
+            uint8_t oldSrc = store.playlistSource;
+            store.playlistSource = (uint8_t)PL_SRC_DLNA;
+
+            if (playlistLength() == 0) {
+              store.playlistSource = oldSrc;
+              changeMode(PM_SDCARD);
+              return;
+             }
+
+            saveValue(&store.playlistSource, (uint8_t)PL_SRC_DLNA, true, true);
+
+            initPlaylistMode();
+            display.resetQueue();
+            display.putRequest(NEWMODE, PLAYER);
+            display.putRequest(NEWSTATION);
+            return;
+        }
+        else {
+            // DLNA → SD
+            changeMode(PM_SDCARD);
+            return;
+        }
+    }
+
+    // --- SD → WEB ---
+    store.playlistSource = PL_SRC_WEB;
+    saveValue(&store.playlistSource, (uint8_t)PL_SRC_WEB, true, true);
+    changeMode(PM_WEB);
+
 #else
-    uint16_t st = (getMode() == PM_SDCARD)
-                  ? store.lastSdStation
-                  : store.lastStation;
-    player.sendCommand({PR_PLAY, st});
+
+    // DLNA nincs → sima toggle
+    changeMode(getMode() == PM_SDCARD ? PM_WEB : PM_SDCARD);
+
 #endif
-  }
+}
 
-  netserver.resetQueue();
-  netserver.requestOnChange(GETINDEX, 0);
+void Config::changeMode(int newmode) { // DLNA mod
+    // Serial.printf("Config.cpp-->changeMode() newmode: %d", newmode);
+#ifdef USE_SD
+    // Encoder dupla klikk (paraméter nélküli hívás)
+    if (newmode == -1) {
+        // DLNA nem választható encoderről
+        newmode = (getMode() == PM_SDCARD) ? PM_WEB : PM_SDCARD;
+    }
 
-  display.resetQueue();
-  display.putRequest(NEWMODE, PLAYER);
-  display.putRequest(NEWSTATION);
+    // 🔒 biztonsági ellenőrzés
+    if (newmode < 0 || newmode >= 2) { // 0 --> radio; 1 --> SD; 2 --> DLNA
+        Serial.printf("##[ERROR]# changeMode invalid newmode: %d\n", newmode);
+        return;
+    }
+
+    bool pir = player.isRunning();
+
+    if (SDC_CS == 255 && newmode == PM_SDCARD) { return; }
+
+    if (network.status == SOFT_AP || display.mode() == LOST) {
+        saveValue(&store.play_mode, (uint8_t)PM_SDCARD);
+        delay(50);
+        ESP.restart();
+    }
+
+    /* === SD only when explicitly requested === */
+    if (newmode == PM_SDCARD) {
+        if (!sdman.ready) {
+            if (!sdman.start()) {
+                Serial.println("##[ERROR]# SD Not Found");
+                netserver.requestOnChange(GETPLAYERMODE, 0);
+                return;
+            }
+        }
+    }
+
+    /* === set mode === */
+    store.play_mode = (playMode_e)newmode;
+    saveValue(&store.play_mode, (uint8_t)store.play_mode, true, true);
+
+    /* === filesystem binding === */
+    if (getMode() == PM_SDCARD) {
+        _SDplaylistFS = &sdman;
+    } else {
+        _SDplaylistFS = &SPIFFS; // WEB + DLNA
+    }
+
+    /* === SD specific actions === */
+    if (getMode() == PM_SDCARD) {
+        if (pir) { player.sendCommand({PR_STOP, 0}); }
+        display.putRequest(NEWMODE, SDCHANGE);
+        delay(50);
+    } else {
+        sdman.stop(); // WEB + DLNA → SD off
+    }
+
+    if (!_bootDone) { return; }
+
+    initPlaylistMode();
+
+    if (pir) {
+    #ifdef USE_DLNA
+        uint16_t st = (getMode() == PM_SDCARD) ? store.lastSdStation : (store.playlistSource == PL_SRC_DLNA ? store.lastDlnaStation : store.lastStation);
+        player.sendCommand({PR_PLAY, st});
+    #else
+        uint16_t st = (getMode() == PM_SDCARD) ? store.lastSdStation : store.lastStation;
+        player.sendCommand({PR_PLAY, st});
+    #endif
+    }
+
+    netserver.resetQueue();
+    netserver.requestOnChange(GETINDEX, 0);
+
+    display.resetQueue();
+    display.putRequest(NEWMODE, PLAYER);
+    display.putRequest(NEWSTATION);
 #endif
 }
 
@@ -278,7 +354,7 @@ char * Config::ipToStr(IPAddress ip){
 }
 bool Config::prepareForPlaying(uint16_t stationId){
   setDspOn(1);
-  vuThreshold = 0;
+  vuRefLevel = 0;
   screensaverTicks=SCREENSAVERSTARTUPDELAY;
   screensaverPlayingTicks=SCREENSAVERSTARTUPDELAY;
   if(getMode()!=PM_SDCARD) {
@@ -474,6 +550,51 @@ void Config::applyThemeColor(const String& name, uint16_t color) {
 }
 
 void Config::loadTheme(){
+ if (config.store.monoTheme) {
+  theme.background = color565(0,0,0);
+  theme.meta       = color565(255,255,255);
+  theme.metabg     = color565(0,0,0);
+  theme.metafill   = color565(180,180,180);
+  theme.title1     = color565(240,240,240);
+  theme.title2     = color565(140,140,140);
+  theme.digit      = color565(240,240,240);
+  theme.div        = color565(162,162,162);
+  theme.weather    = color565(130,130,130);
+  theme.vumax      = color565(240,240,240);
+  theme.vumin      = color565(130,130,130);
+  theme.clock      = color565(240,240,240);
+  theme.clockbg    = color565(30,30,30);
+  theme.seconds    = color565(170,170,170);
+  theme.dow        = color565(255,255,255);
+  theme.date       = color565(150,150,150);
+  theme.heap       = color565(255,168,162);
+  theme.buffer     = color565(150,150,150);
+  theme.ip         = color565(150,150,150);
+  theme.vol        = color565(240,240,240);
+  theme.rssi       = color565(140,140,140);
+  theme.bitrate    = color565(255,255,255);
+  theme.volbarout  = color565(162,162,162);
+  theme.volbarin   = color565(162,162,162);
+  if (config.store.playlistMode) {
+  theme.plcurrent     = color565(255,255,255);
+  theme.plcurrentbg   = color565(10,10,10);
+  theme.plcurrentfill = color565(10,10,10);
+  theme.playlist[0]   = color565(130,130,130);
+  theme.playlist[1]   = color565(130,130,130);
+  theme.playlist[2]   = color565(130,130,130);
+  theme.playlist[3]   = color565(130,130,130);
+  theme.playlist[4]   = color565(130,130,130);
+  } else {
+  theme.plcurrent     = color565(0,0,0);
+  theme.plcurrentbg   = color565(255,255,255);
+  theme.plcurrentfill = color565(255,255,255);
+  theme.playlist[0]   = color565(255,255,255);
+  theme.playlist[1]   = color565(130,130,130);
+  theme.playlist[2]   = color565(130,130,130);
+  theme.playlist[3]   = color565(130,130,130);
+  theme.playlist[4]   = color565(130,130,130);
+  }
+ } else {
   theme.background    = color565(COLOR_BACKGROUND);
   theme.meta          = color565(COLOR_STATION_NAME);
   theme.metabg        = color565(COLOR_STATION_BG);
@@ -498,6 +619,16 @@ void Config::loadTheme(){
   theme.bitrate       = color565(COLOR_BITRATE);
   theme.volbarout     = color565(COLOR_VOLBAR_OUT);
   theme.volbarin      = color565(COLOR_VOLBAR_IN);
+  if (config.store.playlistMode) {
+  theme.plcurrent     = color565(255,255,255);
+  theme.plcurrentbg   = color565(10,10,10);
+  theme.plcurrentfill = color565(10,10,10);
+  theme.playlist[0]   = color565(130,130,130);
+  theme.playlist[1]   = color565(130,130,130);
+  theme.playlist[2]   = color565(130,130,130);
+  theme.playlist[3]   = color565(130,130,130);
+  theme.playlist[4]   = color565(130,130,130);
+  } else {
   theme.plcurrent     = color565(COLOR_PL_CURRENT);
   theme.plcurrentbg   = color565(COLOR_PL_CURRENT_BG);
   theme.plcurrentfill = color565(COLOR_PL_CURRENT_FILL);
@@ -506,7 +637,10 @@ void Config::loadTheme(){
   theme.playlist[2]   = color565(COLOR_PLAYLIST_2);
   theme.playlist[3]   = color565(COLOR_PLAYLIST_3);
   theme.playlist[4]   = color565(COLOR_PLAYLIST_4);
+  }
+
   loadThemeFromHFile();
+ }
   #include "../displays/tools/tftinverttitle.h"
 }
 
@@ -754,17 +888,33 @@ void Config::setDefaults() {
   store.vuHighPctStd    = VU_DEF_HIGH_PCT_STD;
   store.vuMidOn  = 1;
   store.vuPeakOn = 1;
+  store.monoTheme = 0;
   store.vuMidUserColor  = store.vuMidColor;
   store.vuPeakUserColor = store.vuPeakColor;
+  config.store.vuLabelBgColor   = 0x7BEF; // label háttér szürke
+  config.store.vuLabelTextColor = 0xFFFF; // L/R betű fehér
+  store.vuLabelHeightDef = VU_DEF_LHGT_DEF;
+  store.vuLabelHeightStr = VU_DEF_LHGT_STR;
+  store.vuLabelHeightBbx = VU_DEF_LHGT_BBX;
+  store.vuLabelHeightStd = VU_DEF_LHGT_STD;
   store.dateFormat = 1;
   store.showNameday = 0;
   store.clockFontId = 0;
-  store.ttsEnabled  = 0;
   store.metaStNameSkip = 0;
-  store.ttsInterval = 60;
+  store.directChannelChange = 1;        // default ON
+  store.stationsListReturnTime = 5;     // default 5 sec
+  store.hours12 = 0;        // default OFF
+  store.weatherIconSet = 0;
+  store.playlistMode = 0;
+  store.stallWatchdog = 0;
+  store.blDimEnable   = 0;
+  store.blDimLevel    = 5;
+  store.blDimInterval = 60;
   store.ttsDuringPlayback = false;
+  store.ttsInterval = 60;
   store.clockFontMono = true;
   store.stationLine = false;
+  store.shortWeather = false;
   store.fliptouch=false;
   store.dbgtouch=false;
   store.dspon=true;
@@ -815,9 +965,8 @@ void Config::setDefaults() {
   strlcpy(store.autoStopTime, "", sizeof(store.autoStopTime)); /* ----- Auto On-Off Timer --format: empty means disabled --- */
   strlcpy(store.ttsDndStart, "", sizeof(store.ttsDndStart));
   strlcpy(store.ttsDndStop,  "", sizeof(store.ttsDndStop));
-#ifdef USE_DLNA   //DLNA mod
   store.playlistSource = PL_SRC_WEB;
-#endif
+  store.lastPlayedSource = PL_SRC_WEB;
   eepromWrite(EEPROM_START, store);
 }
 
@@ -870,7 +1019,7 @@ void Config::setSmartStart(uint8_t ss) {
 
 void Config::setBalance(int8_t balance) {
   saveValue(&store.balance, balance);
-  player.setBalance(store.balance);
+  player.setBalance(-store.balance);
   netserver.requestOnChange(BALANCE, 0);
 }
 
@@ -901,7 +1050,7 @@ uint8_t Config::setLastSSID(uint8_t val) {
 }
 
 void Config::setTitle(const char* title) {
-  vuThreshold = 0;
+  vuRefLevel = 0;
   memset(config.station.title, 0, BUFLEN);
   strlcpy(config.station.title, title, BUFLEN);
   u8fix(config.station.title);
@@ -1248,6 +1397,16 @@ void Config::setBrightness(bool dosave){
     saveValue(&store.brightness, store.brightness, false, true);
     saveValue(&store.dspon, store.dspon, true, true);
   }
+#endif
+}
+
+void Config::setBrightnessRaw(uint8_t percent) {
+#if BRIGHTNESS_PIN != 255
+  // clamp
+  if (percent > 100) percent = 100;
+
+  // csak a hardver: NEM store, NEM save
+  analogWrite(BRIGHTNESS_PIN, map(percent, 0, 100, 0, 255));
 #endif
 }
 

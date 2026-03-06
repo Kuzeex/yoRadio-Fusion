@@ -20,7 +20,7 @@
 #else
   #define TITLE_FIX 0
 #endif
-#define bootLogoTop     110
+#define bootLogoTop     60 //110
 
 #ifndef BATTERY_OFF
   #define BatX      325				// X coordinate for batt.
@@ -41,7 +41,7 @@ const ScrollConfig title2Conf     PROGMEM = {{ TFT_FRAMEWDT, 61, 2, WA_LEFT }, 1
 const ScrollConfig playlistConf   PROGMEM = {{ TFT_FRAMEWDT, 146, 3, WA_LEFT }, 140, true, MAX_WIDTH, 1000, 7, 40 };
 const ScrollConfig apTitleConf    PROGMEM = {{ TFT_FRAMEWDT, TFT_FRAMEWDT, 4, WA_CENTER }, 140, false, MAX_WIDTH, 0, 7, 40 };
 const ScrollConfig apSettConf     PROGMEM = {{ TFT_FRAMEWDT, 320-TFT_FRAMEWDT-16, 2, WA_LEFT }, 140, false, MAX_WIDTH, 0, 7, 40 };
-const ScrollConfig weatherConf    PROGMEM = {{ 10, 84, 2, WA_LEFT }, 140, false, MAX_WIDTH+20, 0, 3, 60 };
+const ScrollConfig weatherConf    PROGMEM = {{ 10, 84, 2, WA_CENTER }, 140, false, MAX_WIDTH+20, 0, 3, 60 };
 
 
 /* BACKGROUNDS  */                       /* {{ left, top, fontsize, align }, width, height, outlined } */
@@ -88,7 +88,7 @@ inline VUBandsConfig getbandsConf() {
     case 1: return { 220, config.store.vuBarHeightStr, 20, config.store.vuBarGapStr,  config.store.vuBarCountStr,  config.store.vuFadeSpeedStr };  // Streamline
     case 2: return { 220, config.store.vuBarHeightBbx, 20, config.store.vuBarGapBbx,  config.store.vuBarCountBbx,  config.store.vuFadeSpeedBbx };  // Boombox
     case 3: return { 460, config.store.vuBarHeightStd, config.store.vuBarGapStd, 3, config.store.vuBarCountStd,  config.store.vuFadeSpeedStd };  // Studio
-    default: return { config.store.vuBarHeightDef, 100, 6, config.store.vuBarGapDef,  config.store.vuBarCountDef,  config.store.vuFadeSpeedDef }; // Default
+    default: return { config.store.vuBarHeightDef, 115, 6, config.store.vuBarGapDef,  config.store.vuBarCountDef,  config.store.vuFadeSpeedDef }; // Default +10px
   }
 }
 
@@ -98,7 +98,7 @@ inline WidgetConfig getvuConf() {
     case 1: return { TFT_FRAMEWDT, DSP_HEIGHT - 70, 1, WA_CENTER };  // Streamline
     case 2: return { TFT_FRAMEWDT, DSP_HEIGHT - 70, 1, WA_CENTER };  // Boombox
     case 3: return { TFT_FRAMEWDT, DSP_HEIGHT - 70, 1, WA_CENTER };  // Studio
-    default: return { TFT_FRAMEWDT, 105, 1, WA_LEFT }; // Default
+    default: return { TFT_FRAMEWDT, 110, 1, WA_LEFT }; // Default +10px
   }
 }
 

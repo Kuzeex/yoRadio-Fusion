@@ -16,6 +16,8 @@ DlnaStatus g_dlnaStatus = {false,false,0,0,0,{0}};
 static TaskHandle_t s_workerTask = nullptr;
 static uint32_t s_playlistVer = 1;
 
+volatile bool g_dlnaPlaylistDirty = false;
+
 uint32_t dlna_playlist_version() { return s_playlistVer; }
 
 static void bumpPlaylistVer() {
@@ -42,49 +44,6 @@ void dlna_status_setDone(const DlnaJob& j, bool ok, int err, const char* msg) {
   g_dlnaStatus.msg[sizeof(g_dlnaStatus.msg)-1] = 0;
 }
 
-static bool write_playlist_atomic(const char* tmpPath, const char* finalPath, const String& content) {
-  // mutex: egy időben ne olvassa/írja más
-  xSemaphoreTake(g_spiffsMux, portMAX_DELAY);
-
-  File f = SPIFFS.open(tmpPath, FILE_WRITE);
-  if (!f) { xSemaphoreGive(g_spiffsMux); return false; }
-  size_t n = f.print(content);
-  f.close();
-  if (n != content.length()) { SPIFFS.remove(tmpPath); xSemaphoreGive(g_spiffsMux); return false; }
-
-  SPIFFS.remove(finalPath);
-  bool ok = SPIFFS.rename(tmpPath, finalPath);
-
-  xSemaphoreGive(g_spiffsMux);
-  return ok;
-}
-
-static bool append_playlist_atomic(const char* tmpPath, const char* finalPath, const String& addLines) {
-  xSemaphoreTake(g_spiffsMux, portMAX_DELAY);
-
-  // 1) read old
-  String old;
-  {
-    File f = SPIFFS.open(finalPath, FILE_READ);
-    if (f) { old = f.readString(); f.close(); }
-  }
-
-  // 2) write merged to tmp
-  File t = SPIFFS.open(tmpPath, FILE_WRITE);
-  if (!t) { xSemaphoreGive(g_spiffsMux); return false; }
-  t.print(old);
-  if (old.length() && old[old.length()-1] != '\n') t.print("\n");
-  t.print(addLines);
-  t.close();
-
-  // 3) swap
-  SPIFFS.remove(finalPath);
-  bool ok = SPIFFS.rename(tmpPath, finalPath);
-
-  xSemaphoreGive(g_spiffsMux);
-  return ok;
-}
-
 // WDT/yield helper hosszú ciklusokba
 static inline void worker_yield() {
   //esp_task_wdt_reset();
@@ -108,7 +67,7 @@ static void dlna_worker_task(void* ) {
     dlna_status_setBusy(j, "working");
 
     bool ok = false;
-    int err = 0;
+    //int err = 0;
 
     // !!! FONTOS: itt semmilyen AsyncWebServerRequest nincs, csak paraméterek
     if (j.type == DJ_BUILD) {
@@ -171,6 +130,8 @@ static void dlna_worker_task(void* ) {
       // 🔑 DLNA build -> reset DLNA index ONLY
       config.store.lastDlnaStation = 1;
       config.saveValue(&config.store.lastDlnaStation, (uint16_t)1);
+
+      g_dlnaPlaylistDirty = true;
 
       dlna_status_setDone(j, true, 0, "build ok");
     }
@@ -242,6 +203,7 @@ static void dlna_worker_task(void* ) {
       }
 
       bumpPlaylistVer();
+      g_dlnaPlaylistDirty = true;
       dlna_status_setDone(j, true, 0, "append ok");
     }
 

@@ -10,12 +10,21 @@
 #include "../clock/clock_tts.h"
 #include "../displays/fonts/clockfont_api.h"
 #include "../displays/widgets/widgetsconfig.h"
+#include "../plugins/backlight/backlight.h"
 
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
 #endif
 
 CommandHandler cmd;
+// Mono theme backupok
+static bool     s_monoBackupValid = false;
+static uint8_t  s_prev_vuMidOn;
+static uint16_t s_prev_vuMidColor;
+static uint8_t  s_prev_weatherIconSet;
+static uint16_t s_prev_vuLabelBgColor;
+static uint16_t s_prev_vuLabelTextColor;
+static uint8_t  s_prev_stationLine;
 
 // VU paraméterek halasztott mentéséhez
 uint32_t g_vuSaveDue = 0;
@@ -101,7 +110,24 @@ bool CommandHandler::exec(const char *command, const char *value, uint8_t cid) {
   if (strEquals(command, "fliptouch"))    { config.saveValue(&config.store.fliptouch, static_cast<bool>(atoi(value))); flipTS(); return true; }
   if (strEquals(command, "dbgtouch"))     { config.saveValue(&config.store.dbgtouch, static_cast<bool>(atoi(value))); return true; }
   if (strEquals(command, "flipscreen"))   { config.saveValue(&config.store.flipscreen, static_cast<bool>(atoi(value))); display.flip(); display.putRequest(NEWMODE, CLEAR); display.putRequest(NEWMODE, PLAYER); return true; }
-  if (strEquals(command, "brightness"))   { if (!config.store.dspon) netserver.requestOnChange(DSPON, 0); config.store.brightness = static_cast<uint8_t>(atoi(value)); config.setBrightness(true); return true; }
+if (strEquals(command, "brightness")) {
+
+  if (!config.store.dspon)
+    netserver.requestOnChange(DSPON, 0);
+
+  uint8_t v = static_cast<uint8_t>(atoi(value));
+  if (v > 100) v = 100;
+
+  config.store.brightness = v;
+  config.setBrightness(true);
+
+#if (BRIGHTNESS_PIN != 255)
+  // user activity → timer reset
+  backlightPlugin.activity();
+#endif
+
+  return true;
+}
   if (strEquals(command, "screenon"))     { config.setDspOn(static_cast<bool>(atoi(value))); return true; }
   if (strEquals(command, "contrast"))     { config.saveValue(&config.store.contrast, static_cast<uint8_t>(atoi(value))); display.setContrast(); return true; }
   if (strEquals(command, "screensaverenabled")){ config.enableScreensaver(static_cast<bool>(atoi(value))); return true; }
@@ -224,7 +250,10 @@ void handleSet(AsyncWebServerRequest *request) {
     if (v != config.store.metaStNameSkip) {
       config.store.metaStNameSkip   = v;
       changed = true;
-      display.putRequest(NEWSTATION);
+     if (player.isRunning()) {
+      player.sendCommand({PR_STOP, 0});
+      player.sendCommand({PR_PLAY, config.lastStation()});
+     }
     }
   }
 
@@ -295,6 +324,43 @@ void handleSet(AsyncWebServerRequest *request) {
     }
   }
 
+  // --- Backlight dimmer enable ---
+  if (request->hasParam("blDimEnable")) {
+    touched = true;
+    uint8_t v = request->getParam("blDimEnable")->value().toInt() ? 1 : 0;
+    if (v != config.store.blDimEnable) {
+      config.store.blDimEnable   = v;
+      changed = true;
+#if (BRIGHTNESS_PIN != 255)
+    if (v == 0) {
+      backlightPlugin.restoreNow(); 
+    } else {
+      backlightPlugin.wake(); 
+    }
+#endif
+    }
+  }
+
+  // --- Backlight dimmer level (percent) ---
+  if (request->hasParam("blDimLevel")) {
+    touched = true;
+    int dl = constrain(request->getParam("blDimLevel")->value().toInt(), 1, 100);
+    if (dl != (int)config.store.blDimLevel) {
+      config.store.blDimLevel = (uint8_t)dl;
+      changed = true;
+    }
+  }
+
+  // --- Backlight dimmer interval (sec) ---
+  if (request->hasParam("blDimInterval")) {
+    touched = true;
+    int di = constrain(request->getParam("blDimInterval")->value().toInt(), 1, 300);
+    if (di != (int)config.store.blDimInterval) {
+      config.store.blDimInterval = (uint16_t)di;
+      changed = true;
+    }
+  }
+
   // --- Station Line / Border switch ---
   if (request->hasParam("stationLine")) {
     touched = true;
@@ -302,6 +368,123 @@ void handleSet(AsyncWebServerRequest *request) {
     if (v != config.store.stationLine) {
       config.store.stationLine = v;
       changed = true;
+      display.putRequest(DSP_RECONF, 0);
+    }
+  }
+
+  // --- Playlist mode ---
+  if (request->hasParam("playlistMode")) {
+    touched = true;
+    uint8_t v = request->getParam("playlistMode")->value().toInt() ? 1 : 0;
+    if (v != config.store.playlistMode) {
+      config.store.playlistMode = v;
+      changed = true;
+      display.putRequest(DSP_RECONF, 0);
+    }
+  }
+
+  // --- Enable Stall Watchdog mode ---
+  if (request->hasParam("stallWatchdog")) {
+    touched = true;
+    uint8_t v = request->getParam("stallWatchdog")->value().toInt() ? 1 : 0;
+    if (v != config.store.stallWatchdog) {
+      config.store.stallWatchdog = v;
+      changed = true;
+    }
+  }
+
+  // --- Short Weather / Long Weather ---
+  if (request->hasParam("shortWeather")) {
+    touched = true;
+    uint8_t v = request->getParam("shortWeather")->value().toInt() ? 1 : 0;
+    if (v != config.store.shortWeather) {
+      config.store.shortWeather = v;
+      changed = true;
+      display.putRequest(DSP_RECONF, 0);
+    }
+  }
+
+  // Direct channel change
+  if (request->hasParam("directChannelChange")) {
+    touched = true;
+    uint8_t v = request->getParam("directChannelChange")->value().toInt() ? 1 : 0;
+    if (v != config.store.directChannelChange) {
+      config.store.directChannelChange = v;
+      changed = true;
+    }
+  }
+
+  // --- Return Time (sec) ---
+  if (request->hasParam("stationsListReturnTime")) {
+    touched = true;
+    int v = constrain(request->getParam("stationsListReturnTime")->value().toInt(), 2, 30);
+    if (v != (int)config.store.stationsListReturnTime) {
+      config.store.stationsListReturnTime = (uint8_t)v;
+      changed = true;
+    }
+  }
+
+  // 12 Hours Clock
+  if (request->hasParam("hours12")) {
+    touched = true;
+    uint8_t v = request->getParam("hours12")->value().toInt() ? 1 : 0;
+    if (v != config.store.hours12) {
+      config.store.hours12 = v;
+      changed = true;
+      display.putRequest(DSP_RECONF, 0);
+    }
+  }
+
+  // --- Mono THEME ---
+  if (request->hasParam("monoTheme")) {
+    touched = true;
+    uint8_t v = request->getParam("monoTheme")->value().toInt() ? 1 : 0;
+    if (v != config.store.monoTheme) {
+     if (v == 1 && !s_monoBackupValid) {
+       s_prev_vuMidOn           = config.store.vuMidOn;
+       s_prev_vuMidColor        = config.store.vuMidColor;
+       s_prev_weatherIconSet    = config.store.weatherIconSet;
+       s_prev_vuLabelBgColor    = config.store.vuLabelBgColor;
+       s_prev_vuLabelTextColor  = config.store.vuLabelTextColor;
+       s_prev_stationLine       = config.store.stationLine;
+       s_monoBackupValid = true;
+     }
+      config.store.monoTheme   = v;
+    if (v) {
+      config.store.vuMidOn = 0;
+      config.store.vuMidColor = parseColor565("#828282");
+      config.store.weatherIconSet  = 1;
+      config.store.vuLabelBgColor = 0x0000; 
+      config.store.vuLabelTextColor = 0xFFFF;
+      config.store.stationLine = 1;
+    } else {
+      if (s_monoBackupValid) {
+        config.store.vuMidOn           = s_prev_vuMidOn;
+        config.store.vuMidColor        = s_prev_vuMidColor;
+        config.store.weatherIconSet    = s_prev_weatherIconSet;
+        config.store.vuLabelBgColor    = s_prev_vuLabelBgColor;
+        config.store.vuLabelTextColor  = s_prev_vuLabelTextColor;
+        config.store.stationLine       = s_prev_stationLine;
+        s_monoBackupValid = false; 
+      }
+    }
+      changed = true;
+      display.putRequest(DSP_RECONF, 0);
+    }
+  }
+
+  // --- Weather icon set ---
+  if (request->hasParam("weatherIconSet")) {
+    touched = true;
+
+    int v = request->getParam("weatherIconSet")->value().toInt();
+    v = constrain(v, 0, 2);   // jelenleg 0=default, 1=mono (2 későbbre)
+
+    if (v != config.store.weatherIconSet) {
+      config.store.weatherIconSet = (uint8_t)v;
+      changed = true;
+
+      // új ikon kirajzolása
       display.putRequest(DSP_RECONF, 0);
     }
   }
@@ -378,7 +561,6 @@ void handleSetVuLayout(AsyncWebServerRequest *request) {
   display.putRequest(DSP_RECONF, 0);
   request->send(200, "text/plain", "VU layout changed. Applying...");
 }
-
 // /setvu – teljes VU tuning
 void handleSetVu(AsyncWebServerRequest *request) {
   if (!request->hasParam("name") || !request->hasParam("value")) {
@@ -443,6 +625,14 @@ void handleSetVu(AsyncWebServerRequest *request) {
     REF_BY_LAYOUT(st, vuPeakDn, ly) = (uint8_t)constrain(value.toInt(), 0, 100);
   } else if (name == "peakColor") {
     st.vuPeakColor = parseColor565(value);
+  } else if (name == "labelBgColor") {
+    st.vuLabelBgColor = parseColor565(value);
+  } else if (name == "labelTextColor") {
+    st.vuLabelTextColor = parseColor565(value);
+  } else if (name == "labelHeight") {
+    if (!st.vumeter) { request->send(409, "text/plain", "VU disabled"); return; }
+    REF_BY_LAYOUT(st, vuLabelHeight, ly) = (uint8_t)constrain(value.toInt(), 0, 50);
+    needReconf = true;
   } else if (name == "midOn") {
     uint8_t on = value.toInt() ? 1 : 0;
     config.store.vuMidOn = on;
@@ -507,7 +697,8 @@ void handleSetVu(AsyncWebServerRequest *request) {
     (name=="expo" || name=="floor" || name=="ceil" || name=="gain" || name=="knee" ||
      name=="alphaUp" || name=="alphaDown" || name=="pUp" || name=="pDown" ||
      name=="midPct" || name=="highPct" || name=="fade" ||
-     name=="midColor" || name=="peakColor");
+     name=="midColor" || name=="peakColor" || name=="labelBgColor" ||
+     name=="labelTextColor" || name=="labelHeight");
 
   bool saveNow = !isHeavy;
   if (request->hasParam("save")) {

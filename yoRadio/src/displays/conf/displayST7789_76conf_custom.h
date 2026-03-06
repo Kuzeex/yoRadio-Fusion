@@ -15,7 +15,7 @@
 #define TFT_FRAMEWDT    2
 #define MAX_WIDTH       DSP_WIDTH-TFT_FRAMEWDT*2
 
-#define bootLogoTop     8
+#define bootLogoTop     4
 
 //#define HIDE_HEAPBAR
 #define HIDE_VOL
