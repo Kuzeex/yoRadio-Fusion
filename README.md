@@ -438,7 +438,7 @@ Offline: https://github.com/andrasdaradici/YoRadio-Theme-Editor/releases
  
  • Updated **AudioI2S library** to version **3.4.4** (Thnx to: Tamás Várai)
  
- • New features are now accessible from the **WebUI** (see the **Customize page** for detailed descriptions)
+ • New features are now accessible from the **WebUI** (see the [**Customize page**](https://github.com/SimZs/yoRadio-Fusion/blob/main/Customize%20options/readme.md) for detailed descriptions)
  
  • **SDManager chaos resolved** – manual modification of SDManager files is no longer required
  
