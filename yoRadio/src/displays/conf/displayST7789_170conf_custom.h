@@ -62,10 +62,10 @@ const ProgressConfig bootPrgConf  PROGMEM = { 90, 14, 4 };
 //const BitrateConfig fullbitrateConf PROGMEM = {{DSP_WIDTH-TFT_FRAMEWDT-40, 37, 2, WA_LEFT}, 42 };
 inline BitrateConfig getfullbitrateConf() {
   switch (config.store.vuLayout) {
-    case 1: return {{DSP_WIDTH-TFT_FRAMEWDT-95, 42, 1, WA_RIGHT}, 30 };  // Streamline
-    case 2: return {{DSP_WIDTH-TFT_FRAMEWDT-95, 42, 1, WA_RIGHT}, 30 };  // Boombox
-    case 3: return {{DSP_WIDTH-TFT_FRAMEWDT-95, 42, 1, WA_RIGHT}, 30 };  // Studio
-    default: return {{DSP_WIDTH-TFT_FRAMEWDT-95, 42, 1, WA_RIGHT}, 30 }; // Default
+    case 1: return {{DSP_WIDTH-TFT_FRAMEWDT-60, 40, 1, WA_LEFT}, 30 };  // Streamline
+    case 2: return {{DSP_WIDTH-TFT_FRAMEWDT-60, 40, 1, WA_LEFT}, 30 };  // Boombox
+    case 3: return {{DSP_WIDTH-TFT_FRAMEWDT-60, 40, 1, WA_LEFT}, 30 };  // Studio
+    default: return {{DSP_WIDTH-TFT_FRAMEWDT-60, 86, 1, WA_LEFT}, 30 }; // Default
   }
 }
 

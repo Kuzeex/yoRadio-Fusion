@@ -144,6 +144,9 @@ void TouchScreen::loop(){
   static tsDirection_e direct;
   static uint16_t touchVol, touchStation;
   if (!_checklpdelay(20, _touchdelay)) return;
+#if TS_MODEL == TS_MODEL_FT6X36
+  ts.loop(); // feldolgozza az IRQ-kat és meghívja a touch handlert
+#endif
 #if TS_MODEL==TS_MODEL_GT911
   ts.read();
 #endif
