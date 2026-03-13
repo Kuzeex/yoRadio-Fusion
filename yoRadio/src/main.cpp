@@ -3,6 +3,7 @@
 #include "core/config.h"
 #include "pluginsManager/pluginsManager.h"
 #include "plugins/backlight/backlight.h" // backlight plugin
+#include "plugins/ledstrip/ledstrip.h" // ledstrip plugin
 #include "core/telnet.h"
 #include "core/player.h"
 #include "core/display.h"
@@ -78,6 +79,9 @@ void setupOTA(){
 
 void setup() {
   Serial.begin(115200);
+#ifdef USE_LEDSTRIP_PLUGIN
+  ledstripPluginInit();
+#endif
 #if (BRIGHTNESS_PIN!=255)
   backlightPluginInit();
 #endif
@@ -157,6 +161,7 @@ void loop() {
     ArduinoOTA.handle();
 #endif
   }
+  pm.on_loop();   // ledstrip plugin – mindig fut (screensaver is)
   loopControls();
   #ifdef NETSERVER_LOOP1
   netserver.loop();

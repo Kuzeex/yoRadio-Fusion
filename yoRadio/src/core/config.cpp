@@ -182,6 +182,13 @@ void Config::_setupVersion(){
       saveValue(&store.weatherSyncInterval, (uint16_t)30); // min
     default:
       break;
+    case 12:
+      // ledstrip plugin settings – _future_reserved[2] helyén + 2 új byte
+      saveValue(&store.lsEnabled,    (uint8_t)1);
+      saveValue(&store.lsSsEnabled,  (uint8_t)1);
+      saveValue(&store.lsModel,      (uint8_t)0);
+      saveValue(&store.lsBrightness, (uint8_t)30);
+      break;
   }
   currentVersion++;
   saveValue(&store.version, currentVersion);
@@ -967,6 +974,11 @@ void Config::setDefaults() {
   strlcpy(store.ttsDndStop,  "", sizeof(store.ttsDndStop));
   store.playlistSource = PL_SRC_WEB;
   store.lastPlayedSource = PL_SRC_WEB;
+  // ledstrip defaults
+  store.lsEnabled     = 1;
+  store.lsSsEnabled   = 1;
+  store.lsModel       = 0;
+  store.lsBrightness  = 30;
   eepromWrite(EEPROM_START, store);
 }
 

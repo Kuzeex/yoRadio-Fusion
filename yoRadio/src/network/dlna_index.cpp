@@ -65,6 +65,9 @@ if (!controlUrl.length()) {
       return false;
     }
 
+    http.setConnectTimeout(3000);  // kapcsolódási timeout: 3s
+    http.setTimeout(6000);         // válasz timeout: 6s (miniDLNA lassabb lehet)
+
     http.addHeader("Content-Type", "text/xml; charset=\"utf-8\"");
     http.addHeader("SOAPACTION", "\"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\"");
 

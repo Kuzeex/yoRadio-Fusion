@@ -107,6 +107,9 @@ class Plugin {
      */
     virtual void on_btn_click(controlEvt_e& btnid) __attribute__((weak)) {}
 
+    // ÚJ
+    virtual void on_loop() __attribute__((weak)) {}
+
   protected:
     /**
      * Registers the plugin with the plugin manager.
@@ -138,6 +141,9 @@ class pluginsManager {
     inline void on_display_player() { call_event(&Plugin::on_display_player); }
     inline void on_ticker() { call_event(&Plugin::on_ticker); }
     inline void on_btn_click(controlEvt_e& btnid) { call_event(&Plugin::on_btn_click, btnid); }
+
+    // ÚJ
+    inline void on_loop() { call_event(&Plugin::on_loop); }
 
   private:
     std::vector<Plugin*> plugins;

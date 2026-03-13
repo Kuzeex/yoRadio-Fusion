@@ -55,7 +55,7 @@ void Player::init() {
   playerQueue=NULL;
   _resumeFilePos = 0;
   _hasError=false;
-  playerQueue = xQueueCreate( 5, sizeof( playerRequestParams_t ) );
+  playerQueue = xQueueCreate( 8, sizeof( playerRequestParams_t ) ); //volt 5
   setOutputPins(false);
   delay(50);
 #ifdef MQTT_ROOT_TOPIC

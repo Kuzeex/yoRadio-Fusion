@@ -178,7 +178,7 @@ static inline size_t utf8len(const char* s) {
   return len;
 }
 
-static uint32_t vuLastDecay = 0;
+//static uint32_t vuLastDecay = 0;
 
 static inline float _applyVuCurve(float x, uint8_t ly) {
     // 0..1 normalizált bemenet
@@ -1479,9 +1479,9 @@ void ClockWidget::_printClock(bool force){
   gfx.setTextSize(Clock_GFXfontPtr==nullptr?TIME_SIZE:1);
   gfx.setFont(Clock_GFXfontPtr);
   const int16_t timeLeft        = _left();
-  const int16_t timeTop         = _top() - _timeheight;
+  //const int16_t timeTop         = _top() - _timeheight;
   const int16_t timeWidthLive   = _textWidth(_timebuffer);
-  const int16_t vlineX          = timeLeft + timeWidthLive + _space;
+  //const int16_t vlineX          = timeLeft + timeWidthLive + _space;
   const int16_t colTop    = _top() - _timeheight;
   const int16_t colBottom = _top();
   const int16_t colCenter = (colTop + colBottom) / 2;

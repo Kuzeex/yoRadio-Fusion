@@ -46,12 +46,12 @@ void dlna_status_setDone(const DlnaJob& j, bool ok, int err, const char* msg) {
 
 // WDT/yield helper hosszú ciklusokba
 static inline void worker_yield() {
-  //esp_task_wdt_reset();
-  vTaskDelay(1); // 1 tick yield
+  //esp_task_wdt_reset();  // megakadályozza a WDT triggert hosszú HTTP hívások alatt
+  vTaskDelay(1);         // 1 tick yield, más taskoknak is fut
 }
 
 static void dlna_worker_task(void* ) {
-  //esp_task_wdt_add(nullptr); // add current task to WDT (ha használod)
+  //esp_task_wdt_add(nullptr);  // regisztrálja ezt a taskot a WDT-be
   DlnaJob j{};
 
   for (;;) {
@@ -68,6 +68,8 @@ static void dlna_worker_task(void* ) {
 
     bool ok = false;
     //int err = 0;
+
+    esp_task_wdt_reset();  // reset mielőtt a hosszú HTTP munka elkezdődik
 
     // !!! FONTOS: itt semmilyen AsyncWebServerRequest nincs, csak paraméterek
     if (j.type == DJ_BUILD) {

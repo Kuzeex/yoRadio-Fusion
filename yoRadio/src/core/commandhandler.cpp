@@ -489,6 +489,46 @@ void handleSet(AsyncWebServerRequest *request) {
     }
   }
 
+  // --- LED strip: enabled ---
+  if (request->hasParam("lsEnabled")) {
+    touched = true;
+    uint8_t v = request->getParam("lsEnabled")->value().toInt() ? 1 : 0;
+    if (v != config.store.lsEnabled) {
+      config.store.lsEnabled = v;
+      changed = true;
+    }
+  }
+
+  // --- LED strip: screensaver enabled ---
+  if (request->hasParam("lsSsEnabled")) {
+    touched = true;
+    uint8_t v = request->getParam("lsSsEnabled")->value().toInt() ? 1 : 0;
+    if (v != config.store.lsSsEnabled) {
+      config.store.lsSsEnabled = v;
+      changed = true;
+    }
+  }
+
+  // --- LED strip: model/effect ---
+  if (request->hasParam("lsModel")) {
+    touched = true;
+    int v = constrain(request->getParam("lsModel")->value().toInt(), 0, 7);
+    if ((uint8_t)v != config.store.lsModel) {
+      config.store.lsModel = (uint8_t)v;
+      changed = true;
+    }
+  }
+
+  // --- LED strip: brightness (0..100) ---
+  if (request->hasParam("lsBrightness")) {
+    touched = true;
+    int v = constrain(request->getParam("lsBrightness")->value().toInt(), 0, 100);
+    if ((uint8_t)v != config.store.lsBrightness) {
+      config.store.lsBrightness = (uint8_t)v;
+      changed = true;
+    }
+  }
+
   if (touched) {
     if (changed) config.eepromWrite(EEPROM_START, config.store);
     request->send(200, "text/plain", changed ? "OK" : "NOCHANGE");

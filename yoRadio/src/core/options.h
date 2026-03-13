@@ -534,7 +534,7 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
   #define WATCHDOG_TASK_SIZE    1024*6
 #endif
 #ifndef WATCHDOG_TASK_PRIORITY
-  #define WATCHDOG_TASK_PRIORITY    3
+  #define WATCHDOG_TASK_PRIORITY    2   // volt: 3
 #endif
 #ifndef WATCHDOG_TASK_CORE_ID
   #define WATCHDOG_TASK_CORE_ID    1

@@ -27,7 +27,7 @@
 
 #define SYNC_STACK_SIZE    1024 * 4
 #define SYNC_TASK_CORE     0
-#define SYNC_TASK_PRIORITY 3
+#define SYNC_TASK_PRIORITY 1   // volt: 3
 #define WEATHER_STRING_L   254
 
 #ifdef HEAP_DBG

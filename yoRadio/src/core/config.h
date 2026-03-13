@@ -47,7 +47,7 @@
   #define ESP_ARDUINO_3 1
 #endif
 
-#define CONFIG_VERSION  12
+#define CONFIG_VERSION  13
 
 enum playMode_e : uint8_t {  //DLNA mod
   PM_WEB    = 0,
@@ -228,7 +228,11 @@ struct config_t
   uint16_t  weatherSyncInterval;
   uint8_t   playlistSource; 
   uint8_t   lastPlayedSource;
-  uint8_t   _future_reserved[2];
+  // ledstrip plugin settings (2 reserved byte felhasználva + 2 új)
+  uint8_t   lsEnabled;       // 0=off, 1=on
+  uint8_t   lsSsEnabled;     // screensaver alatt is fusson: 0=off, 1=on
+  uint8_t   lsModel;         // 0=VU (default), további modellek később
+  uint8_t   lsBrightness;    // 0..100 (%)
 };
 
 #if IR_PIN!=255

@@ -118,6 +118,14 @@ webserver.on("/dlna/init", HTTP_GET, [](AsyncWebServerRequest* request) {
   request->send(202, "application/json", "{\"queued\":true}");
 });
 
+/* ================= DLNA INFO ================= */
+webserver.on("/dlna/info", HTTP_GET, [](AsyncWebServerRequest* request) {
+  String json = "{\"rootObjectId\":\"";
+  json += String(dlnaIDX);
+  json += "\"}";
+  request->send(200, "application/json", json);
+});
+
 /* ================= DLNA LIST ================= */
 webserver.on("/dlna/list", HTTP_GET, [](AsyncWebServerRequest *request) {
 
@@ -353,6 +361,19 @@ webserver.on("/get", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(200, "application/json", json);
     return;
   }
+
+#ifdef USE_LEDSTRIP_PLUGIN
+  if (request->hasParam("ledstrip")) {
+    String json = "{";
+    json += "\"lsEnabled\":"    + String(config.store.lsEnabled    ? 1 : 0) + ",";
+    json += "\"lsSsEnabled\":"  + String(config.store.lsSsEnabled  ? 1 : 0) + ",";
+    json += "\"lsModel\":"      + String((int)config.store.lsModel)          + ",";
+    json += "\"lsBrightness\":" + String((int)config.store.lsBrightness);
+    json += "}";
+    request->send(200, "application/json", json);
+    return;
+  }
+#endif
 
   if (request->hasParam("config")) {
     String json = "{";
