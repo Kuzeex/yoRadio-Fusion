@@ -6005,7 +6005,6 @@ int32_t Audio::audioFileRead(uint8_t* buff, size_t len) {
         while (len > 0) {
             if (m_dataMode == AUDIO_LOCALFILE) {
                 readed_bytes = m_audiofile.read(buff + offset, len);
-
                 if (readed_bytes >= 0) {
                     m_audioFilePosition += readed_bytes;
                     len -= readed_bytes;
@@ -6045,7 +6044,9 @@ int32_t Audio::audioFileSeek(uint32_t position, size_t len) {
             AUDIO_LOG_DEBUG("actualPos != m_audioFilePosition %lu != %lu", actualPos, m_audioFilePosition);
             m_audioFilePosition = actualPos;
         }
-        if (!m_audiofile) return -1;
+        if (!m_audiofile) {
+            return -1;
+        }
         if (position > m_audiofile.size()) {
             AUDIO_LOG_WARN("position larger than size %lu > %lu", position, m_audiofile.size());
             position = m_audiofile.size();
@@ -6349,43 +6350,27 @@ uint16_t Audio::getVUlevel() {
 }
 // —————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
 void Audio::setTone(int8_t gainLowPass, int8_t gainBandPass, int8_t gainHighPass) {
-  constexpr float BASS_COMP_DB = 6.5;   // Növelve több hangerőt vesz le a 0 - 6 dB tartományban a túlvezérlés RMS miatt.
-  constexpr float MIDHIGH_COMP = 0.4f;  // 0.4–0.6 jó tartomány
-  m_gain0 = gainLowPass;
-  m_gain1 = gainBandPass;
-  m_gain2 = gainHighPass;
+    m_gain0 = gainLowPass;
+    m_gain1 = gainBandPass;
+    m_gain2 = gainHighPass;
 
-  // -------------------------------------------------
-  // Közép + magas miatti alap preamp (basszus nélkül)
-  // -------------------------------------------------
-  int boostM = (m_gain1 > 0) ? m_gain1 : 0;
-  int boostH = (m_gain2 > 0) ? m_gain2 : 0;
-  float midHighCompDb = MIDHIGH_COMP * (float)max(boostM, boostH);
+    // A pre-gain célja: megelőzni a clipping-et boost esetén.
+    // Csak a LEGNAGYOBB boost ellentétét alkalmazzuk az egész jelszintre,
+    // így az IIR szűrők VALÓBAN a beállított mértékben erősítik az adott sávot.
+    // Nettó eredmény: a boost sáv pontosan +N dB-t kap, a többi sáv 0 dB marad.
+    int8_t maxBoost = max((int8_t)0, max(m_gain0, max(m_gain1, m_gain2)));
+    if (maxBoost > 0) {
+        m_corr = pow10f((float)maxBoost / 20.0f); // pre-gain = boost ellentéte
+    } else {
+        m_corr = 1.0f; // nincs boost → nincs előcsillapítás
+    }
+    // biztonsági korlát (max +12 dB boost → corr max ~4.0)
+    if (m_corr < 1.0f) m_corr = 1.0f;
+    if (m_corr > 4.0f) m_corr = 4.0f;
 
-  // -------------------------------------------------
-  // Basszusfüggő hangerő-kompenzáció
-  // -------------------------------------------------
-  float bassCompDb = 0.0f;
-  if (gainLowPass > 0) {
-    // 0..6 dB → 0..BASS_COMP_DB dB
-    float t = (float)gainLowPass / 6.0f;  // 0.0 .. 1.0
-    bassCompDb = t * BASS_COMP_DB;
-  }
-
-  // -------------------------------------------------
-  // Teljes csillapítás dB-ben
-  // -------------------------------------------------
-  float totalAttenDb = midHighCompDb + bassCompDb;
-  m_corr = pow10f(totalAttenDb / 20.0f);
-  // biztonsági korlát (opcionális)
-  if (m_corr < 1.0f) {
-    m_corr = 1.0f;
-  }
-  if (m_corr > 2.7f) {
-    m_corr = 2.7f;  // ~11 dB max
-  }
-  Serial.printf("[EQ] Bass=%d Mid=%d High=%d | bassComp=%.2f dB midHighCompDb=%.3f corr=%.3f  \n", m_gain0, m_gain1, m_gain2, bassCompDb, midHighCompDb, m_corr);
-  IIR_calculateCoefficients(m_gain0, m_gain1, m_gain2);
+    Serial.printf("[EQ] Bass=%d Mid=%d High=%d | maxBoost=%d dB corr=%.3f\n",
+                  m_gain0, m_gain1, m_gain2, maxBoost, m_corr);
+    IIR_calculateCoefficients(m_gain0, m_gain1, m_gain2);
 }
 // —————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
 void Audio::forceMono(bool m) { // #100 mono option
@@ -7884,7 +7869,7 @@ void Audio::startAudioTask() {
                                                       "PeriodicTask",      /* Name of the task */
                                                       AUDIO_STACK_SIZE,    /* Stack size in words */
                                                       this,                /* Task input parameter */
-                                                      4,                   /* Priority of the task */
+                                                      4,                   /* Priority of the task */  
                                                       xAudioStack,         /* Task stack */
                                                       &xAudioTaskBuffer,   /* Memory for the task's control block */
                                                       m_audioTaskCoreId    /* Core where the task should run */
