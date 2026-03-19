@@ -49,7 +49,7 @@ void Telnet::toggle() {
 }
 
 void Telnet::emptyClientStream(WiFiClient client) {
-  client.flush();
+  client.clear();
   delay(50);
   while (client.available()) {
     client.read();
@@ -80,7 +80,7 @@ void Telnet::loop() {
     return;
   }
   uint8_t i;
-  if(config.store.telnet)
+  if(config.store.telnet) { 
     if (WiFi.status() == WL_CONNECTED) {
       if (server.hasClient()) {
         for (i = 0; i < MAX_TLN_CLIENTS; i++) {
@@ -88,7 +88,7 @@ void Telnet::loop() {
             if (clients[i]) {
               clients[i].stop();
             }
-            clients[i] = server.available();
+            clients[i] = server.accept();
             if (!clients[i]) Serial.println("available broken");
             on_connect(config.ipToStr(clients[i].remoteIP()), i);
             clients[i].setNoDelay(true);
@@ -97,7 +97,7 @@ void Telnet::loop() {
           }
         }
         if (i >= MAX_TLN_CLIENTS) {
-          server.available().stop();
+          server.accept().stop();
         }
       }
       for (i = 0; i < MAX_TLN_CLIENTS; i++) {
@@ -115,6 +115,7 @@ void Telnet::loop() {
       }
       delay(1000);
     }
+  }
   handleSerial();
 }
 
@@ -447,11 +448,11 @@ void Telnet::on_input(const char* str, uint8_t clientId) {
     return;
   }
   if (sscanf(str, "wifi.con(\"%[^\"]\",\"%[^\"]\")", config.tmpBuf, config.tmpBuf2) == 2 || sscanf(str, "wifi.con(%[^,],%[^)])", config.tmpBuf, config.tmpBuf2) == 2 || sscanf(str, "wifi.con(%[^ ] %[^)])", config.tmpBuf, config.tmpBuf2) == 2 || sscanf(str, "wifi %[^ ] %s", config.tmpBuf, config.tmpBuf2) == 2) {
-    snprintf(cmBuf, sizeof(cmBuf), "New SSID: \"%s\" with PASS: \"%s\" for next boot\n> ", config.tmpBuf, config.tmpBuf2);
+    snprintf(cmBuf, sizeof(cmBuf), "New SSID: \"%.40s\" with PASS: \"%.40s\" for next boot\n> ", config.tmpBuf, config.tmpBuf2);
     printf(clientId, cmBuf);
     printf(clientId, "...REBOOTING...\n> ");
     memset(cmBuf, 0, sizeof(cmBuf));
-    snprintf(cmBuf, sizeof(cmBuf), "%s\t%s", config.tmpBuf, config.tmpBuf2);
+    snprintf(cmBuf, sizeof(cmBuf), "%.109s\t%.109s", config.tmpBuf, config.tmpBuf2);
     config.saveWifiFromNextion(cmBuf);
     return;
   }

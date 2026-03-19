@@ -1,5 +1,6 @@
+#include "../../core/options.h"
+#ifdef USE_LEDSTRIP_PLUGIN
 #include "ledstrip.h"
-
 #include <Adafruit_NeoPixel.h>
 
 #include "../../core/config.h"
@@ -7,7 +8,7 @@
 #include "../../core/network.h"
 #include "../../core/display.h"
 #include "../../core/common.h"
-#include "../../core/options.h"
+
 
 
 extern Player player;
@@ -703,3 +704,4 @@ void LedStripPlugin::on_loop() {
       break;
   }
 }
+#endif
